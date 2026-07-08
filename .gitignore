@@ -142,3 +142,5 @@ CHANGELOG.md
 CODEMAP.md
 CONTEXT_BUNDLE.md
 mydocs
+# Go backend build artifacts
+go-backend/sub-store
