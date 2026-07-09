@@ -1,0 +1,19 @@
+# Binaries
+sub-store
+*.exe
+
+# Data files
+data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+vendor/
