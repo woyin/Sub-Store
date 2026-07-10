@@ -847,6 +847,18 @@ func (l *loonProducer) ProduceSingle(proxy *model.Proxy) (string, error) {
 			parts = append(parts, "sni="+p.SNI)
 		}
 		return strings.Join(parts, ","), nil
+	case "ssr":
+		parts := []string{name + "=shadowsocksr", p.Server, strconv.Itoa(p.Port), p.Cipher}
+		if p.Password != "" {
+			parts = append(parts, "password="+p.Password)
+		}
+		if p.Protocol != "" {
+			parts = append(parts, "protocol="+p.Protocol)
+		}
+		if p.Obfs != "" {
+			parts = append(parts, "obfs="+p.Obfs)
+		}
+		return strings.Join(parts, ","), nil
 	case "vmess":
 		parts := []string{name + "=vmess", p.Server, strconv.Itoa(p.Port), "password=" + p.UUID, "method=" + p.Cipher}
 		if p.Network != "" {
