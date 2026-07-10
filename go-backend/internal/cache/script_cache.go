@@ -11,8 +11,7 @@ import (
 
 const ScriptResourceCacheKey = "SCRIPT_RESOURCE_CACHE"
 
-// ScriptResourceCache 是 Sub-Store 的持久化脚本资源缓存
-// 它不同于内存级 TTLCache，会将数据持久化到 storage 中
+// ScriptResourceCache 持久化脚本资源缓存，对标 Node.js ResourceCache
 type ScriptResourceCache struct {
 	store         *store.Store
 	mu            sync.RWMutex
@@ -70,11 +69,9 @@ func (s *ScriptResourceCache) marshal() string {
 	return string(data)
 }
 
-// Cleanup 清理过期条目（可选按前缀过滤）
 func (s *ScriptResourceCache) Cleanup(prefix string, ttl int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	resolvedTTL := normalizeTTL(ttl)
 	if resolvedTTL == nil {
 		tmp := int64(0)
@@ -96,7 +93,6 @@ func (s *ScriptResourceCache) Cleanup(prefix string, ttl int64) {
 	}
 }
 
-// RevokeAll 清空所有缓存
 func (s *ScriptResourceCache) RevokeAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -104,11 +100,9 @@ func (s *ScriptResourceCache) RevokeAll() {
 	s.persist()
 }
 
-// GetTime 获取条目的过期时间（毫秒时间戳），如果已过期或不存在返回 0
 func (s *ScriptResourceCache) GetTime(id string) int64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
 	cached, ok := s.resourceCache[id]
 	if !ok {
 		return 0
@@ -119,11 +113,9 @@ func (s *ScriptResourceCache) GetTime(id string) int64 {
 	return 0
 }
 
-// Get 获取缓存，如果已过期且 remove=true 则删除
 func (s *ScriptResourceCache) Get(id string, ttl int64, remove bool) interface{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	resolvedTTL := normalizeTTL(ttl)
 	if resolvedTTL == nil {
 		resolvedTTL = currentDefaultTTL()
@@ -142,11 +134,9 @@ func (s *ScriptResourceCache) Get(id string, ttl int64, remove bool) interface{}
 	return nil
 }
 
-// Set 设置缓存
 func (s *ScriptResourceCache) Set(id string, value interface{}, ttl int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	resolvedTTL := normalizeTTL(ttl)
 	if resolvedTTL == nil {
 		resolvedTTL = currentDefaultTTL()
@@ -165,9 +155,8 @@ func normalizeTTL(ttl int64) *int64 {
 	return nil
 }
 
-// 从环境变量读取默认 TTL（毫秒）
 func currentDefaultTTL() *int64 {
-	defaultTTL := int64(3600 * 1000) // 1 hour default
+	defaultTTL := int64(10 * 24 * 3600 * 1000) // 10 days default
 	return &defaultTTL
 }
 
