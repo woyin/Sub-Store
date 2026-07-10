@@ -43,7 +43,7 @@ var PlatformProducers = map[string]Producer{
 var PlatformSupport = map[string]map[string]bool{
 	"clash":     {"ss": true, "vmess": true, "trojan": true, "ssr": false, "vless": false, "hysteria": false, "hysteria2": true, "tuic": true},
 	"clashmeta": {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "anytls": true},
-	"surge":     {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria": false, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true, "snell": true, "h2-connect": true},
+	surge:     {"ss": true, "vmess": true, "trojan": true, "vless": true, "ssr": true, "socks5": true, "http": true, "snell": true, "hysteria2": true, "tuic": true, "wireguard": true, "h2-connect": true},
 	"loon":      {"ss": true, "vmess": true, "trojan": true, "ssr": false, "vless": true, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true},
 	"qx":        {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true},
 	"singbox":   {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "anytls": true, "wireguard": true, "socks5": true, "http": true},
