@@ -43,7 +43,7 @@ var PlatformProducers = map[string]Producer{
 var PlatformSupport = map[string]map[string]bool{
 	"clash":     {"ss": true, "vmess": true, "trojan": true, "ssr": false, "vless": false, "hysteria": false, "hysteria2": true, "tuic": true},
 	"clashmeta": {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "anytls": true},
-	"surge":     {"ss": true, "vmess": true, "trojan": true, "ssr": false, "vless": false, "hysteria": false, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true, "snell": true},
+	"surge":     {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria": false, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true, "snell": true, "h2-connect": true},
 	"loon":      {"ss": true, "vmess": true, "trojan": true, "ssr": false, "vless": true, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true},
 	"qx":        {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true},
 	"singbox":   {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "anytls": true, "wireguard": true, "socks5": true, "http": true},
@@ -608,6 +608,51 @@ func (q *qxProducer) ProduceSingle(proxy *model.Proxy) (string, error) {
 		return strings.Join(parts, ","), nil
 	case "trojan":
 		parts := []string{"trojan=" + p.Server + ":" + strconv.Itoa(p.Port), "password=" + p.Password, "over-tls=true"}
+		if p.SNI != "" {
+			parts = append(parts, "tls-host="+p.SNI)
+		}
+		parts = append(parts, "tag="+p.Name)
+		return strings.Join(parts, ","), nil
+	case "ssr":
+		if p.Cipher == "" {
+			p.Cipher = "none"
+		}
+		parts := []string{"shadowsocks=" + p.Server + ":" + strconv.Itoa(p.Port), p.Cipher, p.Password}
+		if p.Protocol != "" {
+			parts = append(parts, "ssr-protocol="+p.Protocol)
+		}
+		if p.ProtocolParam != "" {
+			parts = append(parts, "ssr-protocol-param="+p.ProtocolParam)
+		}
+		if p.Obfs != "" {
+			parts = append(parts, "obfs="+p.Obfs)
+		}
+		if p.ObfsParam != "" {
+			parts = append(parts, "obfs-host="+p.ObfsParam)
+		}
+		parts = append(parts, "tag="+p.Name)
+		return strings.Join(parts, ","), nil
+	case "socks5":
+		parts := []string{"socks5=" + p.Server + ":" + strconv.Itoa(p.Port)}
+		if p.Username != "" {
+			parts = append(parts, "username="+p.Username)
+		}
+		if p.Password != "" {
+			parts = append(parts, "password="+p.Password)
+		}
+		parts = append(parts, "tag="+p.Name)
+		return strings.Join(parts, ","), nil
+	case "http":
+		parts := []string{"http=" + p.Server + ":" + strconv.Itoa(p.Port)}
+		if p.Username != "" {
+			parts = append(parts, "username="+p.Username)
+		}
+		if p.Password != "" {
+			parts = append(parts, "password="+p.Password)
+		}
+		if p.TLS {
+			parts = append(parts, "over-tls=true")
+		}
 		if p.SNI != "" {
 			parts = append(parts, "tls-host="+p.SNI)
 		}
