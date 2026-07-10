@@ -922,9 +922,12 @@ func (c *ClashParser) parseProxy(m map[string]interface{}) *model.Proxy {
 	p.AlterID = model.MapGetInt(m, "alterId")
 	p.Network = model.MapGetString(m, "network")
 	p.TLS = model.MapGetBool(m, "tls")
+	p.SNI = model.MapGetString(m, "sni")
 	p.TCPFastOpen = model.MapGetBool(m, "tfo")
 	p.UDP = model.MapGetBool(m, "udp")
 	p.Mux = model.MapGetBool(m, "mux")
+	p.IPVersion = model.MapGetString(m, "ip-version")
+	p.FastOpen = model.MapGetBool(m, "fast-open")
 	p.Obfs = model.MapGetString(m, "obfs")
 	p.ObfsParam = model.MapGetString(m, "obfs-param")
 	p.Protocol = model.MapGetString(m, "protocol")
@@ -959,6 +962,19 @@ func (c *ClashParser) parseProxy(m map[string]interface{}) *model.Proxy {
 	p.Insecure = model.MapGetBool(m, "insecure")
 	p.CaStr = model.MapGetString(m, "ca-str")
 	p.PacketEncoding = model.MapGetString(m, "packet-encoding")
+	p.RenameDev = model.MapGetString(m, "rename-dev")
+	p.MPTCP = model.MapGetBool(m, "mptcp")
+	p.Interface = model.MapGetString(m, "interface")
+	p.CA = model.MapGetString(m, "ca")
+	p.Workers = model.MapGetInt(m, "workers")
+	p.MaxUDPRelayPacketSize = model.MapGetInt(m, "max-udp-relay-packet-size")
+	p.MaxOpenStreams = model.MapGetInt(m, "max-open-streams")
+	p.HeartbeatInterval = model.MapGetInt(m, "heartbeat-interval")
+	p.ReduceRTT = model.MapGetBool(m, "reduce-rtt")
+	p.RequestTimeout = model.MapGetInt(m, "request-timeout")
+	p.ServerKey = model.MapGetString(m, "server-key")
+	p.ServerKeyAlgorithm = model.MapGetString(m, "server-key-algorithm")
+	p.UDPOverTCPVersion = model.MapGetInt(m, "udp-over-tcp-version")
 
 	if sni := model.MapGetString(m, "servername"); sni != "" {
 		p.SNI = sni
@@ -1010,8 +1026,23 @@ func (c *ClashParser) parseProxy(m map[string]interface{}) *model.Proxy {
 	if v, ok := m["reality-opts"]; ok {
 		p.RealityOpts = normalizeMap(v)
 	}
-	if v, ok := m["extra"]; ok {
-		p.Extra = normalizeMap(v)
+	if v, ok := m["brutal-opts"]; ok {
+		p.BrutalOpts = normalizeMap(v)
+	}
+	if v, ok := m["local-dns"]; ok {
+		if arr, ok := v.([]interface{}); ok {
+			res := make([]string, 0, len(arr))
+			for _, item := range arr {
+				res = append(res, fmt.Sprintf("%v", item))
+			}
+			p.LocalDNS = res
+		}
+	}
+	if v, ok := m["obfs-opts"]; ok {
+		p.ObfsOpts = normalizeMap(v)
+	}
+	if v, ok := m["override"]; ok {
+		p.Override = normalizeMap(v)
 	}
 	if v, ok := m["smux"]; ok {
 		p.Smux = normalizeMap(v)

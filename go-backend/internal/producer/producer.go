@@ -43,7 +43,7 @@ var PlatformProducers = map[string]Producer{
 var PlatformSupport = map[string]map[string]bool{
 	"clash":     {"ss": true, "vmess": true, "trojan": true, "ssr": false, "vless": false, "hysteria": false, "hysteria2": true, "tuic": true},
 	"clashmeta": {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "anytls": true},
-	surge:     {"ss": true, "vmess": true, "trojan": true, "vless": true, "ssr": true, "socks5": true, "http": true, "snell": true, "hysteria2": true, "tuic": true, "wireguard": true, "h2-connect": true},
+	"surge":     {"ss": true, "vmess": true, "trojan": true, "vless": true, "ssr": true, "socks5": true, "http": true, "snell": true, "hysteria2": true, "tuic": true, "wireguard": true, "h2-connect": true},
 	"loon":      {"ss": true, "vmess": true, "trojan": true, "ssr": false, "vless": true, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true},
 	"qx":        {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true},
 	"singbox":   {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "anytls": true, "wireguard": true, "socks5": true, "http": true},
@@ -238,6 +238,89 @@ func (c *clashProducer) produceSingleMap(p *model.Proxy) map[string]interface{} 
 		delete(m, "tls")
 	}
 
+	// Normalize http-opts path and headers.Host to arrays for vmess/vless
+	if (p.Type == "vmess" || p.Type == "vless") && p.Network == "http" {
+		if httpOpts, ok := m["http-opts"].(map[string]interface{}); ok {
+			if path, ok := httpOpts["path"]; ok {
+				if _, ok := path.([]interface{}); !ok {
+					httpOpts["path"] = []interface{}{path}
+				}
+			}
+			if headers, ok := httpOpts["headers"].(map[string]interface{}); ok {
+				if host, ok := headers["Host"]; ok {
+					if _, ok := host.([]interface{}); !ok {
+						headers["Host"] = []interface{}{host}
+					}
+				}
+			}
+		}
+	}
+
+	// Normalize h2-opts path to string and host to array for vmess/vless
+	if (p.Type == "vmess" || p.Type == "vless") && p.Network == "h2" {
+		if h2Opts, ok := m["h2-opts"].(map[string]interface{}); ok {
+			if path, ok := h2Opts["path"]; ok {
+				if arr, ok := path.([]interface{}); ok && len(arr) > 0 {
+					h2Opts["path"] = arr[0]
+				}
+			}
+			var host interface{}
+			if h, ok := h2Opts["host"]; ok {
+				host = h
+			} else if headers, ok := h2Opts["headers"].(map[string]interface{}); ok {
+				if h, ok := headers["host"]; ok {
+					host = h
+				} else if h, ok := headers["Host"]; ok {
+					host = h
+				}
+			}
+			if host != nil {
+				if _, ok := host.([]interface{}); !ok {
+					h2Opts["host"] = []interface{}{host}
+				} else {
+					h2Opts["host"] = host
+				}
+				if headers, ok := h2Opts["headers"].(map[string]interface{}); ok {
+					delete(headers, "host")
+					delete(headers, "Host")
+					if len(headers) == 0 {
+						delete(h2Opts, "headers")
+					}
+				}
+			}
+		}
+	}
+
+	// Ensure ws-opts has default path /
+	if p.Network == "ws" {
+		if opts, ok := m["ws-opts"].(map[string]interface{}); ok {
+			if opts["path"] == nil || opts["path"] == "" {
+				opts["path"] = "/"
+			}
+		} else {
+			m["ws-opts"] = map[string]interface{}{"path": "/"}
+		}
+	}
+
+	// Inherit skip-cert-verify into plugin-opts.tls
+	if pluginOpts, ok := m["plugin-opts"].(map[string]interface{}); ok {
+		if tls, ok := pluginOpts["tls"].(bool); ok && tls {
+			if _, ok := pluginOpts["skip-cert-verify"]; !ok {
+				if proxyScv, ok := m["skip-cert-verify"].(bool); ok {
+					pluginOpts["skip-cert-verify"] = proxyScv
+				}
+			}
+		}
+	}
+
+	// Clean up internal grpc-opts fields
+	if p.Network == "grpc" {
+		if opts, ok := m["grpc-opts"].(map[string]interface{}); ok {
+			delete(opts, "_grpc-type")
+			delete(opts, "_grpc-authority")
+		}
+	}
+
 	delete(m, "subName")
 	delete(m, "collectionName")
 	delete(m, "id")
@@ -363,6 +446,89 @@ func (c *clashMetaProducer) produceSingleMap(p *model.Proxy) map[string]interfac
 		delete(m, "tls")
 	}
 
+	// Normalize http-opts path and headers.Host to arrays for vmess/vless
+	if (p.Type == "vmess" || p.Type == "vless") && p.Network == "http" {
+		if httpOpts, ok := m["http-opts"].(map[string]interface{}); ok {
+			if path, ok := httpOpts["path"]; ok {
+				if _, ok := path.([]interface{}); !ok {
+					httpOpts["path"] = []interface{}{path}
+				}
+			}
+			if headers, ok := httpOpts["headers"].(map[string]interface{}); ok {
+				if host, ok := headers["Host"]; ok {
+					if _, ok := host.([]interface{}); !ok {
+						headers["Host"] = []interface{}{host}
+					}
+				}
+			}
+		}
+	}
+
+	// Normalize h2-opts path to string and host to array for vmess/vless
+	if (p.Type == "vmess" || p.Type == "vless") && p.Network == "h2" {
+		if h2Opts, ok := m["h2-opts"].(map[string]interface{}); ok {
+			if path, ok := h2Opts["path"]; ok {
+				if arr, ok := path.([]interface{}); ok && len(arr) > 0 {
+					h2Opts["path"] = arr[0]
+				}
+			}
+			var host interface{}
+			if h, ok := h2Opts["host"]; ok {
+				host = h
+			} else if headers, ok := h2Opts["headers"].(map[string]interface{}); ok {
+				if h, ok := headers["host"]; ok {
+					host = h
+				} else if h, ok := headers["Host"]; ok {
+					host = h
+				}
+			}
+			if host != nil {
+				if _, ok := host.([]interface{}); !ok {
+					h2Opts["host"] = []interface{}{host}
+				} else {
+					h2Opts["host"] = host
+				}
+				if headers, ok := h2Opts["headers"].(map[string]interface{}); ok {
+					delete(headers, "host")
+					delete(headers, "Host")
+					if len(headers) == 0 {
+						delete(h2Opts, "headers")
+					}
+				}
+			}
+		}
+	}
+
+	// Ensure ws-opts has default path /
+	if p.Network == "ws" {
+		if opts, ok := m["ws-opts"].(map[string]interface{}); ok {
+			if opts["path"] == nil || opts["path"] == "" {
+				opts["path"] = "/"
+			}
+		} else {
+			m["ws-opts"] = map[string]interface{}{"path": "/"}
+		}
+	}
+
+	// Inherit skip-cert-verify into plugin-opts.tls
+	if pluginOpts, ok := m["plugin-opts"].(map[string]interface{}); ok {
+		if tls, ok := pluginOpts["tls"].(bool); ok && tls {
+			if _, ok := pluginOpts["skip-cert-verify"]; !ok {
+				if proxyScv, ok := m["skip-cert-verify"].(bool); ok {
+					pluginOpts["skip-cert-verify"] = proxyScv
+				}
+			}
+		}
+	}
+
+	// Clean up internal grpc-opts fields
+	if p.Network == "grpc" {
+		if opts, ok := m["grpc-opts"].(map[string]interface{}); ok {
+			delete(opts, "_grpc-type")
+			delete(opts, "_grpc-authority")
+		}
+	}
+
 	delete(m, "subName")
 	delete(m, "collectionName")
 	delete(m, "id")
@@ -374,6 +540,14 @@ func (c *clashMetaProducer) produceSingleMap(p *model.Proxy) map[string]interfac
 	for k, v := range m {
 		if v == nil || strings.HasPrefix(k, "_") {
 			delete(m, k)
+		}
+	}
+
+	for _, key := range []string{"grpc-opts", "ws-opts", "http-opts", "h2-opts", "reality-opts"} {
+		if v, ok := m[key]; ok {
+			if vm, ok := v.(map[string]interface{}); ok && len(vm) == 0 {
+				delete(m, key)
+			}
 		}
 	}
 
@@ -469,6 +643,177 @@ func (s *surgeProducer) ProduceSingle(proxy *model.Proxy) (string, error) {
 			parts = append(parts, "public-key="+p.PublicKey)
 		}
 		return strings.Join(parts, ","), nil
+	case "vless":
+		parts := []string{name + "=vless", p.Server, strconv.Itoa(p.Port), "uuid=" + p.UUID}
+		if p.TLS {
+			parts = append(parts, "tls=true")
+		}
+		if p.SNI != "" {
+			parts = append(parts, "sni="+p.SNI)
+		}
+		if p.SkipCertVerify {
+			parts = append(parts, "skip-cert-verify=true")
+		}
+		if p.TCPFastOpen {
+			parts = append(parts, "tfo=true")
+		}
+		if p.UDP {
+			parts = append(parts, "udp-relay=true")
+		}
+		if p.Network == "ws" {
+			parts = append(parts, "ws=true")
+			if p.WSOpts != nil {
+				if path := model.MapGetString(p.WSOpts, "path"); path != "" {
+					parts = append(parts, "ws-path="+path)
+				}
+				if headers, ok := p.WSOpts["headers"].(map[string]interface{}); ok {
+					if host := model.MapGetString(headers, "Host"); host != "" {
+						parts = append(parts, "ws-headers=Host:"+host)
+					}
+				}
+			}
+		}
+		if p.Flow != "" {
+			parts = append(parts, "flow="+p.Flow)
+		}
+		if p.RealityOpts != nil {
+			if pk := model.MapGetString(p.RealityOpts, "public-key"); pk != "" {
+				parts = append(parts, `public-key="`+pk+`"`)
+			}
+			if sid := model.MapGetString(p.RealityOpts, "short-id"); sid != "" {
+				parts = append(parts, "short-id="+sid)
+			}
+		}
+		if p.TLSFingerprint != "" {
+			parts = append(parts, "server-cert-fingerprint-sha256="+p.TLSFingerprint)
+		}
+		if p.ALPN != nil && len(p.ALPN) > 0 {
+			parts = append(parts, `alpn="`+strings.Join(p.ALPN, ",")+`"`)
+		}
+		return strings.Join(parts, ","), nil
+	case "ssr":
+		parts := []string{name + "=ssr", p.Server, strconv.Itoa(p.Port), "encrypt-method=" + p.Cipher, "password=" + p.Password}
+		if p.Protocol != "" {
+			parts = append(parts, "protocol="+p.Protocol)
+		}
+		if p.ProtocolParam != "" {
+			parts = append(parts, "protocol-param="+p.ProtocolParam)
+		}
+		if p.Obfs != "" {
+			parts = append(parts, "obfs="+p.Obfs)
+		}
+		if p.ObfsParam != "" {
+			parts = append(parts, "obfs-param="+p.ObfsParam)
+		}
+		return strings.Join(parts, ","), nil
+	case "socks5":
+		proxyType := "socks5"
+		if p.TLS {
+			proxyType = "socks5-tls"
+		}
+		parts := []string{name + "=" + proxyType, p.Server, strconv.Itoa(p.Port)}
+		if p.Username != "" {
+			parts = append(parts, `username="`+p.Username+`"`)
+		}
+		if p.Password != "" {
+			parts = append(parts, `password="`+p.Password+`"`)
+		}
+		if p.TLS {
+			if p.SNI != "" {
+				parts = append(parts, "sni="+p.SNI)
+			}
+			if p.SkipCertVerify {
+				parts = append(parts, "skip-cert-verify=true")
+			}
+			if p.TLSFingerprint != "" {
+				parts = append(parts, "server-cert-fingerprint-sha256="+p.TLSFingerprint)
+			}
+		}
+		if p.UDP {
+			parts = append(parts, "udp-relay=true")
+		}
+		return strings.Join(parts, ","), nil
+	case "http":
+		proxyType := "http"
+		if p.TLS {
+			proxyType = "https"
+		}
+		parts := []string{name + "=" + proxyType, p.Server, strconv.Itoa(p.Port)}
+		if p.Username != "" {
+			parts = append(parts, `username="`+p.Username+`"`)
+		}
+		if p.Password != "" {
+			parts = append(parts, `password="`+p.Password+`"`)
+		}
+		if p.TLS {
+			if p.SNI != "" {
+				parts = append(parts, "sni="+p.SNI)
+			}
+			if p.SkipCertVerify {
+				parts = append(parts, "skip-cert-verify=true")
+			}
+			if p.TLSFingerprint != "" {
+				parts = append(parts, "server-cert-fingerprint-sha256="+p.TLSFingerprint)
+			}
+		}
+		if p.UDP {
+			parts = append(parts, "udp-relay=true")
+		}
+		return strings.Join(parts, ","), nil
+	case "snell":
+		parts := []string{name + "=snell", p.Server, strconv.Itoa(p.Port)}
+		if p.Version > 0 {
+			parts = append(parts, "version="+strconv.Itoa(p.Version))
+		}
+		if p.PSK != "" {
+			parts = append(parts, `psk="`+p.PSK+`"`)
+		}
+		if p.Mode != "" {
+			parts = append(parts, "mode="+p.Mode)
+		}
+		if p.Obfs != "" {
+			parts = append(parts, "obfs="+p.Obfs)
+		}
+		if p.Host != "" {
+			parts = append(parts, "obfs-host="+p.Host)
+		}
+		if p.Path != "" {
+			parts = append(parts, "obfs-uri="+p.Path)
+		}
+		if p.TCPFastOpen {
+			parts = append(parts, "tfo=true")
+		}
+		if p.UDP {
+			parts = append(parts, "udp-relay=true")
+		}
+		return strings.Join(parts, ","), nil
+	case "h2-connect":
+		parts := []string{name + "=h2-connect", p.Server, strconv.Itoa(p.Port)}
+		if p.Username != "" {
+			parts = append(parts, `username="`+p.Username+`"`)
+		}
+		if p.Password != "" {
+			parts = append(parts, `password="`+p.Password+`"`)
+		}
+		if p.SNI != "" {
+			parts = append(parts, "sni="+p.SNI)
+		}
+		if p.SkipCertVerify {
+			parts = append(parts, "skip-cert-verify=true")
+		}
+		if p.TLSFingerprint != "" {
+			parts = append(parts, "server-cert-fingerprint-sha256="+p.TLSFingerprint)
+		}
+		if p.ALPN != nil && len(p.ALPN) > 0 {
+			parts = append(parts, `alpn="`+strings.Join(p.ALPN, ",")+`"`)
+		}
+		if p.ClientFingerprint != "" && p.ClientFingerprint != "chrome" {
+			parts = append(parts, "tls-profile="+p.ClientFingerprint)
+		}
+		if p.UDP {
+			parts = append(parts, "udp-relay=true")
+		}
+		return strings.Join(parts, ","), nil
 	default:
 		return "", fmt.Errorf("surge: unsupported type %s", p.Type)
 	}
@@ -548,6 +893,12 @@ func (l *loonProducer) ProduceSingle(proxy *model.Proxy) (string, error) {
 		parts := []string{name + "=tuic", p.Server, strconv.Itoa(p.Port), "password=" + p.Password, "uuid=" + p.UUID}
 		if p.SNI != "" {
 			parts = append(parts, "sni="+p.SNI)
+		}
+		return strings.Join(parts, ","), nil
+	case "anytls":
+		parts := []string{name + "=anytls", p.Server, strconv.Itoa(p.Port), "password=" + p.Password}
+		if p.SNI != "" {
+			parts = append(parts, "tls-name="+p.SNI)
 		}
 		return strings.Join(parts, ","), nil
 	default:

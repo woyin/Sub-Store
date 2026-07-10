@@ -86,7 +86,24 @@ type Proxy struct {
 	Smux                map[string]interface{}    `json:"smux,omitempty"`
 	XUDPPacketAddr      bool                     `json:"packet-addr,omitempty"`
 	PacketEncoding      string                   `json:"packet-encoding,omitempty"`
-	Raw                 map[string]interface{}    `json:"-"`
+	RenameDev             string                   `json:"rename-dev,omitempty"`
+	MPTCP                 bool                     `json:"mptcp,omitempty"`
+	Override              map[string]interface{}   `json:"override,omitempty"`
+	Interface             string                   `json:"interface,omitempty"`
+	CA                    string                   `json:"ca,omitempty"`
+	BrutalOpts            map[string]interface{}   `json:"brutal-opts,omitempty"`
+	Workers               int                      `json:"workers,omitempty"`
+	LocalDNS              []string                 `json:"local-dns,omitempty"`
+	MaxUDPRelayPacketSize int                      `json:"max-udp-relay-packet-size,omitempty"`
+	MaxOpenStreams        int                      `json:"max-open-streams,omitempty"`
+	HeartbeatInterval     int                      `json:"heartbeat-interval,omitempty"`
+	ReduceRTT             bool                     `json:"reduce-rtt,omitempty"`
+	RequestTimeout        int                      `json:"request-timeout,omitempty"`
+	ServerKey             string                   `json:"server-key,omitempty"`
+	ServerKeyAlgorithm    string                   `json:"server-key-algorithm,omitempty"`
+	ObfsOpts              map[string]interface{}   `json:"obfs-opts,omitempty"`
+	UDPOverTCPVersion     int                      `json:"udp-over-tcp-version,omitempty"`
+	Raw                   map[string]interface{}   `json:"-"`
 }
 
 func MapGetString(m map[string]interface{}, key string) string {
