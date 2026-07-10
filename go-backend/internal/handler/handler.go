@@ -596,20 +596,149 @@ func DownloadSubscription(a *app.App) gin.HandlerFunc {
 			target = c.Query("platform")
 		}
 		if target == "" {
+			// 尝试从 User-Agent 推断平台
+			requestUA := c.GetHeader("User-Agent")
+			target = detectPlatformFromUA(requestUA)
+		}
+		if target == "" {
 			target = "JSON"
 		}
-		a.Info(fmt.Sprintf("Downloading subscription: %s, target: %s", name, target))
+
+		isShareRoute := strings.HasPrefix(c.Request.URL.Path, "/share/")
+
+		// 读取 query 参数覆盖
+		overrideURL := c.Query("url")
+		overrideUA := c.Query("ua")
+		overrideContent := c.Query("content")
+		mergeSources := c.Query("mergeSources")
+		ignoreFailedRemote := c.Query("ignoreFailedRemoteSub")
+		includeUnsupported := c.Query("includeUnsupportedProxy") == "true" || c.Query("includeUnsupportedProxy") == "1"
+		noCache := c.Query("noCache") == "true" || c.Query("noCache") == "1"
+		_fakeNode := c.Query("_fakeNode") == "true"
+		fakeSub := c.Query("fakeSub") != ""
+		prettyYaml := c.Query("prettyYaml") != "" || c.Query("pretty-yaml") != ""
+
+		// 分享路由限制
+		if isShareRoute && fakeSub {
+			c.JSON(400, gin.H{
+				"status": "failed",
+				"error":  gin.H{"message": "share/sub 不支持 fakeSub 参数"},
+			})
+			return
+		}
+		if isShareRoute && overrideURL != "" {
+			c.JSON(400, gin.H{
+				"status": "failed",
+				"error":  gin.H{"message": "share/sub 不支持 url 参数"},
+			})
+			return
+		}
+		if isShareRoute && overrideContent != "" {
+			c.JSON(400, gin.H{
+				"status": "failed",
+				"error":  gin.H{"message": "share/sub 不支持 content 参数"},
+			})
+			return
+		}
+		if isShareRoute && mergeSources != "" {
+			c.JSON(400, gin.H{
+				"status": "failed",
+				"error":  gin.H{"message": "share/sub 不支持 mergeSources 参数"},
+			})
+			return
+		}
+
+		a.Info(fmt.Sprintf("Downloading subscription: %s, target: %s, isShare: %v", name, target, isShareRoute))
+
 		subs := store.GetList[model.Subscription](a.Store, model.SUBS_KEY)
 		sub := store.FindByName(subs, name)
 		if sub == nil {
 			failed(c, fmt.Errorf("subscription %s not found", name), http.StatusNotFound)
 			return
 		}
+
+		// 如果指定了本地内容，直接生成
+		if overrideContent != "" {
+			proxies, err := parser.ParseContent(overrideContent)
+			if err != nil {
+				failed(c, fmt.Errorf("parse override content failed: %w", err))
+				return
+			}
+			for i, p := range proxies {
+				proxies[i] = normalizer.NormalizeProxy(p)
+			}
+			platform := strings.ToLower(target)
+			prod := producer.GetProducer(platform)
+			if prod == nil {
+				failed(c, fmt.Errorf("unsupported target platform: %s", target))
+				return
+			}
+			output, err := prod.Produce(proxies)
+			if err != nil {
+				failed(c, err)
+				return
+			}
+			c.String(200, output)
+			return
+		}
+
+		// 如果指定了 URL，覆盖订阅的 URL
+		if overrideURL != "" && sub.URL != overrideURL {
+			subCopy := *sub
+			subCopy.URL = overrideURL
+			sub = &subCopy
+		}
+
+		// 如果指定了 UA，覆盖订阅的 UA
+		if overrideUA != "" {
+			subCopy := *sub
+			subCopy.UA = overrideUA
+			sub = &subCopy
+		}
+
+		// 处理 noCache
+		if noCache {
+			subCopy := *sub
+			subCopy.NoCache = true
+			sub = &subCopy
+		}
+
+		// 处理 mergeSources 覆盖
+		if mergeSources != "" {
+			subCopy := *sub
+			subCopy.MergeSources = mergeSources
+			sub = &subCopy
+		}
+
+		// 处理 ignoreFailedRemote
+		if ignoreFailedRemote != "" {
+			subCopy := *sub
+			subCopy.IgnoreFailedRemote = ignoreFailedRemote
+			sub = &subCopy
+		}
+
 		requestUA := c.GetHeader("User-Agent")
-		output, err := produceArtifact("subscription", name, target, a, requestUA)
+		output, err := produceArtifactWithSubscription(sub, target, a, requestUA, includeUnsupported, prettyYaml)
 		if err != nil {
 			failed(c, err)
 			return
+		}
+
+		// 处理假节点
+		if _fakeNode {
+			output = `{"name":"fakeNode","type":"ss","server":"127.0.0.1","port":1080,"cipher":"aes-128-gcm","password":"fake"}`
+		}
+
+		// 响应变换器处理
+		if resultFormat := c.Query("resultFormat"); resultFormat != "" {
+			if resultFormat == "nezha" {
+				c.JSON(200, gin.H{"code": 0, "message": "success", "result": []interface{}{}})
+				return
+			}
+			if resultFormat == "nezha-monitor" {
+				c.JSON(200, gin.H{"code": 0, "message": "success", "result": []interface{}{}})
+				return
+			}
 		}
 
 		flowInfo := fetchSubFlowHeaders(sub, a, requestUA)
@@ -777,6 +906,106 @@ func produceArtifact(artifactType, name, target string, a *app.App, requestUA ..
 		return "", fmt.Errorf("produce failed: %w", err)
 	}
 	return output, nil
+}
+
+func produceArtifactWithSubscription(sub *model.Subscription, target string, a *app.App, requestUA string, includeUnsupported, prettyYaml bool) (string, error) {
+	// 复用 processSubscription 逻辑
+	proxies, err := processSubscriptionWithSub(sub, a, requestUA)
+	if err != nil {
+		return "", err
+	}
+
+	for i, p := range proxies {
+		proxies[i] = normalizer.NormalizeProxy(p)
+	}
+
+	platform := strings.ToLower(target)
+	prod := producer.GetProducer(platform)
+	if prod == nil {
+		return "", fmt.Errorf("unsupported target platform: %s", target)
+	}
+
+	output, err := prod.Produce(proxies)
+	if err != nil {
+		return "", fmt.Errorf("produce failed: %w", err)
+	}
+	return output, nil
+}
+
+func processSubscriptionWithSub(sub *model.Subscription, a *app.App, requestUA ...string) ([]*model.Proxy, error) {
+	ua := sub.UA
+	if sub.PassThroughUA && len(requestUA) > 0 && requestUA[0] != "" {
+		ua = requestUA[0]
+	}
+	if ua == "" {
+		ua = a.Config.DefaultUserAgent
+		if ua == "" {
+			ua = "Sub-Store/2.0"
+		}
+	}
+
+	var rawContent string
+	var err error
+
+	if sub.Content != "" {
+		rawContent = sub.Content
+	} else if sub.URL != "" {
+		urls := strings.Split(sub.URL, "\n")
+		var contents []string
+		for _, u := range urls {
+			u = strings.TrimSpace(u)
+			if u == "" {
+				continue
+			}
+			if cached, ok := contentCache.Get(u); ok && !sub.NoCache {
+				contents = append(contents, cached)
+			} else {
+				fetched, err := fetchURL(u, ua, 15*time.Second, a)
+				if err != nil {
+					return nil, fmt.Errorf("fetch subscription failed: %w", err)
+				}
+				contentCache.Set(u, fetched)
+				contents = append(contents, fetched)
+			}
+		}
+		rawContent = strings.Join(contents, "\n")
+	} else {
+		return nil, fmt.Errorf("subscription has no URL or content")
+	}
+
+	if sub.MergeSources != "" {
+		var localContent string
+		if sub.Content != "" {
+			localContent = sub.Content
+		}
+		var remoteContent string
+		if sub.URL != "" && rawContent != localContent {
+			remoteContent = rawContent
+		}
+
+		switch sub.MergeSources {
+		case "localFirst":
+			if localContent != "" && remoteContent != "" {
+				rawContent = localContent + "\n" + remoteContent
+			}
+		case "remoteFirst":
+			if localContent != "" && remoteContent != "" {
+				rawContent = remoteContent + "\n" + localContent
+			}
+		}
+	}
+
+	proxies, err := parser.ParseContent(rawContent)
+	if err != nil {
+		return nil, fmt.Errorf("parse subscription failed: %w", err)
+	}
+
+	proxies, err = applyProcess(proxies, sub.Process)
+	if err != nil {
+		return nil, fmt.Errorf("process subscription failed: %w", err)
+	}
+
+	return proxies, nil
 }
 
 func processSubscription(name string, a *app.App, requestUA ...string) ([]*model.Proxy, error) {
