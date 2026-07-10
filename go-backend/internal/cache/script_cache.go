@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"sub-store/internal/app"
+	"sub-store/internal/store"
 )
 
 const ScriptResourceCacheKey = "SCRIPT_RESOURCE_CACHE"
@@ -14,8 +14,8 @@ const ScriptResourceCacheKey = "SCRIPT_RESOURCE_CACHE"
 // ScriptResourceCache 是 Sub-Store 的持久化脚本资源缓存
 // 它不同于内存级 TTLCache，会将数据持久化到 storage 中
 type ScriptResourceCache struct {
-	store        *app.Store
-	mu           sync.RWMutex
+	store         *store.Store
+	mu            sync.RWMutex
 	resourceCache map[string]cacheEntry
 }
 
@@ -24,24 +24,35 @@ type cacheEntry struct {
 	Data interface{} `json:"data"`
 }
 
-func NewScriptResourceCache(store *app.Store) *ScriptResourceCache {
-	s := &ScriptResourceCache{
-		store:         store,
+func NewScriptResourceCache(s *store.Store) *ScriptResourceCache {
+	src := &ScriptResourceCache{
+		store:         s,
 		resourceCache: make(map[string]cacheEntry),
 	}
-	s.load()
-	s.Cleanup("", 0)
-	return s
+	src.load()
+	src.Cleanup("", 0)
+	return src
 }
 
 func (s *ScriptResourceCache) load() {
-	data := s.store.Read(ScriptResourceCacheKey)
-	if data == "" {
+	val := s.store.Read(ScriptResourceCacheKey)
+	if val == nil {
+		return
+	}
+	var data []byte
+	switch v := val.(type) {
+	case string:
+		data = []byte(v)
+	case []byte:
+		data = v
+	default:
+		data = []byte(fmt.Sprint(v))
+	}
+	if len(data) == 0 {
 		return
 	}
 	var loaded map[string]cacheEntry
-	if err := json.Unmarshal([]byte(data), &loaded); err != nil {
-		// 解析失败，重置为空
+	if err := json.Unmarshal(data, &loaded); err != nil {
 		return
 	}
 	s.resourceCache = loaded
@@ -162,8 +173,8 @@ func currentDefaultTTL() *int64 {
 
 var globalScriptCache *ScriptResourceCache
 
-func InitScriptResourceCache(store *app.Store) {
-	globalScriptCache = NewScriptResourceCache(store)
+func InitScriptResourceCache(s *store.Store) {
+	globalScriptCache = NewScriptResourceCache(s)
 }
 
 func GetScriptCache() *ScriptResourceCache {
