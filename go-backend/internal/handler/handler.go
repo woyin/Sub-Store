@@ -4,15 +4,16 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
 	"time"
 
+	"sub-store/internal/ageutil"
 	"sub-store/internal/app"
 	"sub-store/internal/cache"
+	"sub-store/internal/download"
 	"sub-store/internal/flowutil"
 	"sub-store/internal/middleware"
 	"sub-store/internal/model"
@@ -812,7 +813,7 @@ func processSubscription(name string, a *app.App, requestUA ...string) ([]*model
 			if cached, ok := contentCache.Get(u); ok && !sub.NoCache {
 				contents = append(contents, cached)
 			} else {
-				fetched, err := fetchURL(u, ua, 15*time.Second)
+				fetched, err := fetchURL(u, ua, 15*time.Second, a)
 				if err != nil {
 					return nil, fmt.Errorf("fetch subscription %s failed: %w", name, err)
 				}
@@ -993,7 +994,7 @@ func processFileContent(file *model.File, a *app.App) (string, error) {
 			if cached, ok := contentCache.Get(u); ok {
 				contents = append(contents, cached)
 			} else {
-				fetched, err := fetchURL(u, ua, 15*time.Second)
+				fetched, err := fetchURL(u, ua, 15*time.Second, a)
 				if err != nil {
 					return "", fmt.Errorf("fetch file %s failed: %w", file.Name, err)
 				}
@@ -1064,40 +1065,55 @@ func applyProcess(proxies []*model.Proxy, ops []model.Operator) ([]*model.Proxy,
 	return processor.Pipeline(proxies, procs)
 }
 
-func fetchURL(urlStr, ua string, timeout time.Duration) (string, error) {
-	if urlStr == "" {
-		return "", fmt.Errorf("empty URL")
+// globalDownloadClient 全局下载客户端实例
+var globalDownloadClient *download.Client
+
+func initDownloadClient(a *app.App) {
+	if globalDownloadClient == nil {
+		var settings map[string]interface{}
+		if data := a.Store.Read(model.SETTINGS_KEY); data != nil {
+			if s, ok := data.(map[string]interface{}); ok {
+				settings = s
+			}
+		}
+		globalDownloadClient = download.NewClient(a.Store, settings)
+	}
+}
+
+func fetchURL(urlStr, ua string, timeout time.Duration, a *app.App) (string, error) {
+	initDownloadClient(a)
+
+	opts := download.Options{
+		UA:               ua,
+		Timeout:          timeout,
+		DefaultUserAgent: a.Config.DefaultUserAgent,
+		DefaultTimeout:   a.Config.DefaultTimeout,
+		CacheThreshold:   a.Config.CacheThreshold,
+		PlatformUserAgent: detectPlatformFromUA(ua),
 	}
 
-	client := &http.Client{Timeout: timeout}
-	req, err := http.NewRequest("GET", urlStr, nil)
-	if err != nil {
-		return "", err
-	}
+	return globalDownloadClient.Download(urlStr, opts)
+}
 
-	if ua != "" {
-		req.Header.Set("User-Agent", ua)
-	} else {
-		req.Header.Set("User-Agent", "Sub-Store/2.0")
+// detectPlatformFromUA 从 User-Agent 推断平台类型
+func detectPlatformFromUA(ua string) string {
+	uaLower := strings.ToLower(ua)
+	if strings.Contains(uaLower, "stash") {
+		return "stash"
 	}
-	req.Header.Set("Accept", "*/*")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
+	if strings.Contains(uaLower, "loon") {
+		return "loon"
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+	if strings.Contains(uaLower, "quantumult") || strings.Contains(uaLower, "qx") {
+		return "qx"
 	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+	if strings.Contains(uaLower, "shadowrocket") {
+		return "shadowrocket"
 	}
-
-	return string(body), nil
+	if strings.Contains(uaLower, "surge") {
+		return "surge"
+	}
+	return ""
 }
 
 func GetSettings(a *app.App) gin.HandlerFunc {
@@ -1184,7 +1200,7 @@ func PreviewSubscription(a *app.App) gin.HandlerFunc {
 		} else if sub.Content != "" {
 			rawContent = sub.Content
 		} else if sub.URL != "" {
-			rawContent, err = fetchURL(sub.URL, sub.UA, 15*time.Second)
+			rawContent, err = fetchURL(sub.URL, sub.UA, 15*time.Second, a)
 			if err != nil {
 				failed(c, fmt.Errorf("fetch failed: %w", err))
 				return
@@ -1674,9 +1690,14 @@ func GetNodeInfo(a *app.App) gin.HandlerFunc {
 
 func GenerateAgeKeyPair(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		publicKey, secretKey, err := ageutil.GenerateKeyPair()
+		if err != nil {
+			failed(c, err)
+			return
+		}
 		result := map[string]interface{}{
-			"publicKey": "age1...",
-			"secretKey": "AGE-SECRET-KEY-1...",
+			"publicKey": publicKey,
+			"secretKey": secretKey,
 		}
 		success(c, result)
 	}
@@ -1691,8 +1712,13 @@ func DeriveAgePublicKey(a *app.App) gin.HandlerFunc {
 			failed(c, err)
 			return
 		}
+		publicKey, err := ageutil.DerivePublicKey(req.SecretKey)
+		if err != nil {
+			failed(c, err)
+			return
+		}
 		result := map[string]interface{}{
-			"publicKey": "age1...",
+			"publicKey": publicKey,
 		}
 		success(c, result)
 	}

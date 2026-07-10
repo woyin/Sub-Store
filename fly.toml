@@ -1,0 +1,43 @@
+# fly.toml
+
+# 'app' 是您在 Fly.io 上的应用名称，必须是全局唯一的。
+# 运行 `fly launch` 或 `fly apps create` 时会自动生成或要求您设置。
+app = "bs-sub-store-app"
+
+# [build] 部分告诉 Fly.io 使用 Docker Hub 上的现成镜像，而不是在本地构建。
+[build]
+  image = "xream/sub-store"
+
+# [env] 部分设置非敏感的环境变量。
+[env]
+  SUB_STORE_BACKEND_MERGE = "true"
+  # 我们将把敏感的后端路径作为 secret (机密) 来设置，而不是明文放在这里。
+
+# [mounts] 部分定义了持久化存储卷，等同于 Docker 的 volume。
+[mounts]
+  source = "sub_store_data"
+  destination = "/opt/app/data"
+
+# [[services]] 部分定义了网络服务和端口映射。
+[[services]]
+  protocol = "tcp"
+  # internal_port 必须是容器内应用正在监听的端口。
+  # 根据我们之前的日志分析，sub-store 监听的是 3000。
+  internal_port = 3000
+
+  # 定义对外暴露的端口。Fly.io 会自动处理 HTTP 和 HTTPS。
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true # 自动将 HTTP 请求重定向到 HTTPS
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  # 添加健康检查，确保应用正常运行。
+  [services.http_checks]
+    interval = "15s"
+    timeout = "2s"
+    method = "GET"
+    path = "/" # 检查应用的根路径

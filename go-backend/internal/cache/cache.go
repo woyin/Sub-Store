@@ -34,11 +34,19 @@ func (c *Cache) Get(key string) (string, bool) {
 }
 
 func (c *Cache) Set(key, value string) {
+	c.SetWithTTL(key, value, c.ttl)
+}
+
+// SetWithTTL 以指定 TTL 写入缓存项。ttl <= 0 时使用默认 TTL。
+func (c *Cache) SetWithTTL(key, value string, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if ttl <= 0 {
+		ttl = c.ttl
+	}
 	c.entries[key] = entry{
 		value:     value,
-		expiresAt: time.Now().Add(c.ttl),
+		expiresAt: time.Now().Add(ttl),
 	}
 }
 
