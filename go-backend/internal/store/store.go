@@ -108,6 +108,13 @@ func (s *Store) Delete(key string) {
 	s.persist()
 }
 
+func (s *Store) Save() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.persist()
+	return nil
+}
+
 func (s *Store) Migrate() error {
 	schemaVersion, _ := s.cache["schemaVersion"].(float64)
 	if schemaVersion < 2.0 {

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"sub-store/internal/geoip"
 	"sub-store/internal/model"
 )
 
@@ -164,6 +165,10 @@ func BuildProcessor(op model.Operator) (Processor, error) {
 			script = fmt.Sprintf("%v", v)
 		}
 		return NewScriptOperator(script)
+	case "Add Proxies From Subscription":
+		return NewAddProxiesFromSubscriptionOp(op.Args)
+	case "Response Transformer":
+		return NewResponseTransformer(op.Args)
 	case "Region Filter":
 		var regions []string
 		keep := true
@@ -524,6 +529,16 @@ func getFlag(server string) string {
 }
 
 func getFlagForIP(ip string) string {
+	// Try MMDB lookup first
+	if geoip.IsMMDBReady() {
+		isoCode := geoip.GeoIP(ip)
+		if isoCode != "" {
+			if flag, ok := isoToFlag(isoCode); ok {
+				return flag
+			}
+		}
+	}
+	// Fallback: crude first-octet heuristic
 	firstOctet := strings.SplitN(ip, ".", 2)[0]
 	switch firstOctet {
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9",
@@ -532,6 +547,21 @@ func getFlagForIP(ip string) string {
 		return "🇺🇸"
 	}
 	return ""
+}
+
+// isoToFlag converts a 2-letter ISO country code to a regional indicator emoji flag.
+func isoToFlag(code string) (string, bool) {
+	if len(code) != 2 {
+		return "", false
+	}
+	c1 := rune(code[0])
+	c2 := rune(code[1])
+	if c1 < 'A' || c1 > 'Z' || c2 < 'A' || c2 > 'Z' {
+		return "", false
+	}
+	// Regional Indicator Symbols: A=U+1F1E6, B=U+1F1E7, ..., Z=U+1F1FF
+	flag := string(rune(0x1F1E6 + int(c1-'A'))) + string(rune(0x1F1E6 + int(c2-'A')))
+	return flag, true
 }
 
 type sortOperator struct {
@@ -754,6 +784,17 @@ func (f *regionFilter) Process(proxies []*model.Proxy) ([]*model.Proxy, error) {
 	for _, p := range proxies {
 		nameFlag := extractFlagFromName(p.Name)
 		matches := flagSet[nameFlag]
+
+		// If no flag in name, try MMDB lookup on server IP
+		if !matches && nameFlag == "" && geoip.IsMMDBReady() && p.Server != "" {
+			isoCode := geoip.GeoIP(p.Server)
+			if isoCode != "" {
+				if flag, ok := isoToFlag(isoCode); ok {
+					matches = flagSet[flag]
+				}
+			}
+		}
+
 		if f.keep && matches {
 			result = append(result, p)
 		} else if !f.keep && !matches {

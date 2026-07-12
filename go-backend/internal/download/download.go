@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"filippo.io/age"
 	"sub-store/internal/cache"
 	"sub-store/internal/flowutil"
 	"sub-store/internal/model"
@@ -537,9 +538,33 @@ func normalizeClashYaml(raw string) string {
 
 // decryptArmorIfPresent 如果内容是 AGE armored 格式则解密。
 func decryptArmorIfPresent(body, secretKey string) (string, error) {
-	// TODO: 集成 filippo.io/age 实现实际解密
-	if strings.Contains(body, "-----BEGIN AGE ENCRYPTED FILE-----") {
-		return "", fmt.Errorf("AGE decryption not yet implemented")
+	if !strings.Contains(body, "-----BEGIN AGE ENCRYPTED FILE-----") {
+		return body, nil
 	}
-	return body, nil
+	return decryptAge(body, secretKey)
+}
+
+// decryptAge 使用 age 库解密 AGE armored 加密内容。
+func decryptAge(armored, secretKey string) (string, error) {
+	if secretKey == "" {
+		return "", fmt.Errorf("AGE secret key is required for decryption")
+	}
+
+	identities, err := age.ParseX25519Identity(secretKey)
+	if err != nil {
+		return "", fmt.Errorf("invalid AGE secret key: %w", err)
+	}
+
+	reader := strings.NewReader(armored)
+	decReader, err := age.Decrypt(reader, identities)
+	if err != nil {
+		return "", fmt.Errorf("AGE decryption failed: %w", err)
+	}
+
+	decrypted, err := io.ReadAll(decReader)
+	if err != nil {
+		return "", fmt.Errorf("failed to read decrypted content: %w", err)
+	}
+
+	return string(decrypted), nil
 }

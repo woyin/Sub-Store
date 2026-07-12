@@ -7,14 +7,19 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
+	"net"
+
 	"sub-store/internal/ageutil"
+	"sub-store/internal/geoip"
 	"sub-store/internal/app"
 	"sub-store/internal/cache"
 	"sub-store/internal/download"
 	"sub-store/internal/flowutil"
+	"sub-store/internal/gist"
 	"sub-store/internal/middleware"
 	"sub-store/internal/model"
 	"sub-store/internal/normalizer"
@@ -533,6 +538,70 @@ func ReplaceArtifacts(a *app.App) gin.HandlerFunc {
 func RestoreArtifacts(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		a.Info("Restoring artifacts from Gist")
+
+		settingsData := a.Store.Read(model.SETTINGS_KEY)
+		if settingsData == nil {
+			failed(c, fmt.Errorf("settings not found"))
+			return
+		}
+		settings, ok := settingsData.(map[string]interface{})
+		if !ok {
+			failed(c, fmt.Errorf("invalid settings format"))
+			return
+		}
+
+		gistToken := ""
+		if v, ok := settings["gistToken"].(string); ok {
+			gistToken = v
+		}
+		if gistToken == "" {
+			failed(c, fmt.Errorf("gist token is not configured"))
+			return
+		}
+
+		githubProxy := ""
+		if v, ok := settings["githubProxy"].(string); ok {
+			githubProxy = v
+		}
+		githubAPIURL := ""
+		if v, ok := settings["githubApiUrl"].(string); ok {
+			githubAPIURL = v
+		}
+
+		client := gist.NewClient(gist.Config{
+			GistToken:    gistToken,
+			GitHubProxy:  githubProxy,
+			GitHubAPIURL: githubAPIURL,
+		})
+
+		result, err := client.Download()
+		if err != nil {
+			failed(c, fmt.Errorf("failed to restore from gist: %w", err))
+			return
+		}
+
+		// 恢复 artifacts 的 URL
+		artifacts := store.GetList[model.Artifact](a.Store, model.ARTIFACTS_KEY)
+		restored := 0
+		if data, ok := result["artifacts"]; ok {
+			if raw, err := json.Marshal(data); err == nil {
+				var remoteArtifacts []model.Artifact
+				if err := json.Unmarshal(raw, &remoteArtifacts); err == nil {
+					for _, remoteArt := range remoteArtifacts {
+						existing := store.FindByName(artifacts, remoteArt.Name)
+						if existing != nil {
+							existing.URL = remoteArt.URL
+							existing.Updated = remoteArt.Updated
+							store.UpdateByName(artifacts, remoteArt.Name, *existing)
+							restored++
+						}
+					}
+					store.SaveList(a.Store, model.ARTIFACTS_KEY, artifacts)
+				}
+			}
+		}
+
+		a.Info(fmt.Sprintf("Restored %d artifacts from Gist", restored))
 		success(c, nil)
 	}
 }
@@ -817,7 +886,15 @@ func SyncArtifact(a *app.App) gin.HandlerFunc {
 			failed(c, fmt.Errorf("artifact %s is not configured for sync", name))
 			return
 		}
-		success(c, artifact)
+
+		// 调用 App 层的完整同步逻辑
+		updatedArtifact, err := a.SyncArtifact(name)
+		if err != nil {
+			failed(c, fmt.Errorf("failed to sync artifact %s: %w", name, err))
+			return
+		}
+
+		success(c, updatedArtifact)
 	}
 }
 
@@ -1554,14 +1631,23 @@ func SortSubs(a *app.App) gin.HandlerFunc {
 			return
 		}
 		allSubs := store.GetList[model.Subscription](a.Store, model.SUBS_KEY)
-		var newSubs []model.Subscription
-		for _, name := range names {
-			if sub := store.FindByName(allSubs, name); sub != nil {
-				newSubs = append(newSubs, *sub)
-			}
+		orderMap := make(map[string]int)
+		for i, name := range names {
+			orderMap[name] = i
 		}
-		store.SaveList(a.Store, model.SUBS_KEY, newSubs)
-		success(c, nil)
+		sort.Slice(allSubs, func(i, j int) bool {
+			left, leftOK := orderMap[allSubs[i].Name]
+			right, rightOK := orderMap[allSubs[j].Name]
+			if !leftOK {
+				left = len(names)
+			}
+			if !rightOK {
+				right = len(names)
+			}
+			return left < right
+		})
+		store.SaveList(a.Store, model.SUBS_KEY, allSubs)
+		success(c, allSubs)
 	}
 }
 
@@ -1573,14 +1659,23 @@ func SortCollections(a *app.App) gin.HandlerFunc {
 			return
 		}
 		allCols := store.GetList[model.Collection](a.Store, model.COLLECTIONS_KEY)
-		var newCols []model.Collection
-		for _, name := range names {
-			if col := store.FindByName(allCols, name); col != nil {
-				newCols = append(newCols, *col)
-			}
+		orderMap := make(map[string]int)
+		for i, name := range names {
+			orderMap[name] = i
 		}
-		store.SaveList(a.Store, model.COLLECTIONS_KEY, newCols)
-		success(c, nil)
+		sort.Slice(allCols, func(i, j int) bool {
+			left, leftOK := orderMap[allCols[i].Name]
+			right, rightOK := orderMap[allCols[j].Name]
+			if !leftOK {
+				left = len(names)
+			}
+			if !rightOK {
+				right = len(names)
+			}
+			return left < right
+		})
+		store.SaveList(a.Store, model.COLLECTIONS_KEY, allCols)
+		success(c, allCols)
 	}
 }
 
@@ -1592,14 +1687,23 @@ func SortArtifacts(a *app.App) gin.HandlerFunc {
 			return
 		}
 		all := store.GetList[model.Artifact](a.Store, model.ARTIFACTS_KEY)
-		var newList []model.Artifact
-		for _, name := range names {
-			if item := store.FindByName(all, name); item != nil {
-				newList = append(newList, *item)
-			}
+		orderMap := make(map[string]int)
+		for i, name := range names {
+			orderMap[name] = i
 		}
-		store.SaveList(a.Store, model.ARTIFACTS_KEY, newList)
-		success(c, nil)
+		sort.Slice(all, func(i, j int) bool {
+			left, leftOK := orderMap[all[i].Name]
+			right, rightOK := orderMap[all[j].Name]
+			if !leftOK {
+				left = len(names)
+			}
+			if !rightOK {
+				right = len(names)
+			}
+			return left < right
+		})
+		store.SaveList(a.Store, model.ARTIFACTS_KEY, all)
+		success(c, all)
 	}
 }
 
@@ -1611,14 +1715,23 @@ func SortFiles(a *app.App) gin.HandlerFunc {
 			return
 		}
 		all := store.GetList[model.File](a.Store, model.FILES_KEY)
-		var newList []model.File
-		for _, name := range names {
-			if item := store.FindByName(all, name); item != nil {
-				newList = append(newList, *item)
-			}
+		orderMap := make(map[string]int)
+		for i, name := range names {
+			orderMap[name] = i
 		}
-		store.SaveList(a.Store, model.FILES_KEY, newList)
-		success(c, nil)
+		sort.Slice(all, func(i, j int) bool {
+			left, leftOK := orderMap[all[i].Name]
+			right, rightOK := orderMap[all[j].Name]
+			if !leftOK {
+				left = len(names)
+			}
+			if !rightOK {
+				right = len(names)
+			}
+			return left < right
+		})
+		store.SaveList(a.Store, model.FILES_KEY, all)
+		success(c, all)
 	}
 }
 
@@ -1635,11 +1748,28 @@ func SortTokens(a *app.App) gin.HandlerFunc {
 
 func SortArchives(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var names []string
-		if err := c.ShouldBindJSON(&names); err != nil {
+		var ids []string
+		if err := c.ShouldBindJSON(&ids); err != nil {
 			failed(c, err)
 			return
 		}
+		archives := store.GetList[model.Archive](a.Store, model.ARCHIVES_KEY)
+		orderMap := make(map[string]int)
+		for i, id := range ids {
+			orderMap[id] = i
+		}
+		sort.Slice(archives, func(i, j int) bool {
+			left, leftOK := orderMap[archives[i].ID]
+			right, rightOK := orderMap[archives[j].ID]
+			if !leftOK {
+				left = len(ids)
+			}
+			if !rightOK {
+				right = len(ids)
+			}
+			return left < right
+		})
+		store.SaveList(a.Store, model.ARCHIVES_KEY, archives)
 		success(c, nil)
 	}
 }
@@ -1731,35 +1861,100 @@ func RestoreArchive(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 		archives := store.GetList[model.Archive](a.Store, model.ARCHIVES_KEY)
-		for _, archive := range archives {
+		var foundIdx int = -1
+		var foundArchive *model.Archive
+		for i, archive := range archives {
 			if archive.ID == id {
-				switch archive.Type {
-				case "sub":
-					var sub model.Subscription
-					if data, err := json.Marshal(archive.Data); err == nil {
-						json.Unmarshal(data, &sub)
-					}
-				case "col":
-					var col model.Collection
-					if data, err := json.Marshal(archive.Data); err == nil {
-						json.Unmarshal(data, &col)
-					}
-				case "file":
-					var file model.File
-					if data, err := json.Marshal(archive.Data); err == nil {
-						json.Unmarshal(data, &file)
-					}
-				case "artifact":
-					var artifact model.Artifact
-					if data, err := json.Marshal(archive.Data); err == nil {
-						json.Unmarshal(data, &artifact)
-					}
-				}
-				success(c, nil)
-				return
+				foundIdx = i
+				foundArchive = &archives[i]
+				break
 			}
 		}
-		failed(c, fmt.Errorf("archive %s not found", id), http.StatusNotFound)
+		if foundArchive == nil {
+			failed(c, fmt.Errorf("archive %s not found", id), http.StatusNotFound)
+			return
+		}
+
+		var restored interface{}
+		switch foundArchive.Type {
+		case "sub":
+			var sub model.Subscription
+			if data, err := json.Marshal(foundArchive.Data); err == nil {
+				if err := json.Unmarshal(data, &sub); err != nil {
+					failed(c, fmt.Errorf("failed to deserialize subscription: %w", err))
+					return
+				}
+			}
+			subs := store.GetList[model.Subscription](a.Store, model.SUBS_KEY)
+			if store.FindByName(subs, sub.Name) != nil {
+				failed(c, fmt.Errorf("subscription %s already exists", sub.Name), http.StatusConflict)
+				return
+			}
+			store.InsertByPosition(&subs, sub, "bottom")
+			store.SaveList(a.Store, model.SUBS_KEY, subs)
+			restored = sub
+		case "col":
+			var col model.Collection
+			if data, err := json.Marshal(foundArchive.Data); err == nil {
+				if err := json.Unmarshal(data, &col); err != nil {
+					failed(c, fmt.Errorf("failed to deserialize collection: %w", err))
+					return
+				}
+			}
+			cols := store.GetList[model.Collection](a.Store, model.COLLECTIONS_KEY)
+			if store.FindByName(cols, col.Name) != nil {
+				failed(c, fmt.Errorf("collection %s already exists", col.Name), http.StatusConflict)
+				return
+			}
+			store.InsertByPosition(&cols, col, "bottom")
+			store.SaveList(a.Store, model.COLLECTIONS_KEY, cols)
+			restored = col
+		case "file":
+			var file model.File
+			if data, err := json.Marshal(foundArchive.Data); err == nil {
+				if err := json.Unmarshal(data, &file); err != nil {
+					failed(c, fmt.Errorf("failed to deserialize file: %w", err))
+					return
+				}
+			}
+			files := store.GetList[model.File](a.Store, model.FILES_KEY)
+			if store.FindByName(files, file.Name) != nil {
+				failed(c, fmt.Errorf("file %s already exists", file.Name), http.StatusConflict)
+				return
+			}
+			store.InsertByPosition(&files, file, "bottom")
+			store.SaveList(a.Store, model.FILES_KEY, files)
+			restored = file
+		case "artifact":
+			var artifact model.Artifact
+			if data, err := json.Marshal(foundArchive.Data); err == nil {
+				if err := json.Unmarshal(data, &artifact); err != nil {
+					failed(c, fmt.Errorf("failed to deserialize artifact: %w", err))
+					return
+				}
+			}
+			// Normalize: clear updated/url fields like JS version
+			artifact.Updated = 0
+			artifact.URL = ""
+			artifacts := store.GetList[model.Artifact](a.Store, model.ARTIFACTS_KEY)
+			if store.FindByName(artifacts, artifact.Name) != nil {
+				failed(c, fmt.Errorf("artifact %s already exists", artifact.Name), http.StatusConflict)
+				return
+			}
+			store.InsertByPosition(&artifacts, artifact, "bottom")
+			store.SaveList(a.Store, model.ARTIFACTS_KEY, artifacts)
+			restored = artifact
+		default:
+			failed(c, fmt.Errorf("unsupported archive type: %s", foundArchive.Type), http.StatusBadRequest)
+			return
+		}
+
+		// Remove the archive entry after successful restore
+		archives = store.GetList[model.Archive](a.Store, model.ARCHIVES_KEY)
+		archives = append(archives[:foundIdx], archives[foundIdx+1:]...)
+		store.SaveList(a.Store, model.ARCHIVES_KEY, archives)
+
+		success(c, restored)
 	}
 }
 
@@ -1909,11 +2104,35 @@ func GetNodeInfo(a *app.App) gin.HandlerFunc {
 			failed(c, err)
 			return
 		}
-		result := map[string]interface{}{
+
+		info := map[string]interface{}{
 			"server": req.Server,
-			"info":   "Node info placeholder",
 		}
-		success(c, result)
+
+		// Resolve domain to IP if needed
+		serverIP := req.Server
+		if !model.IsIP(serverIP) && serverIP != "" {
+			ips, err := net.LookupHost(serverIP)
+			if err == nil && len(ips) > 0 {
+				serverIP = ips[0]
+				info["resolvedIP"] = serverIP
+			}
+		}
+
+		// MMDB lookup
+		if model.IsIP(serverIP) && serverIP != "" {
+			if isoCode := geoip.GeoIP(serverIP); isoCode != "" {
+				info["country"] = isoCode
+			}
+			if asn := geoip.IPASN(serverIP); asn != 0 {
+				info["asn"] = asn
+			}
+			if aso := geoip.IPASO(serverIP); aso != "" {
+				info["aso"] = aso
+			}
+		}
+
+		success(c, info)
 	}
 }
 
