@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"sub-store/internal/download"
 	"sub-store/internal/gist"
 	"sub-store/internal/model"
 	"sub-store/internal/normalizer"
@@ -386,20 +387,51 @@ func applyProcess(proxies []*model.Proxy, ops []model.Operator) ([]*model.Proxy,
 	return processor.Pipeline(proxies, procs)
 }
 
-// downloadContent 从 URL 下载内容。
-// 简化的下载实现，避免与 download 包产生循环依赖。
+// downloadContent 从 URL 下载内容，使用 download 包实现。
 func (a *App) downloadContent(urlStr, ua string) (string, error) {
-	// TODO: 使用全局 download client 或传递 client 引用
-	// 目前作为占位实现，实际应使用 download.Client
 	if ua == "" {
 		ua = a.Config.DefaultUserAgent
 	}
 	if ua == "" {
 		ua = "clash.meta/v1.19.23"
 	}
-	// 由于避免循环依赖，这里暂时返回空
-	// 后续可以通过接口注入 download client
-	return "", nil
+
+	settingsData := a.Store.Read(model.SETTINGS_KEY)
+	var settings map[string]interface{}
+	if data, ok := settingsData.(map[string]interface{}); ok {
+		settings = data
+	}
+
+	client := download.NewClient(a.Store, settings)
+	return client.Download(urlStr, download.Options{
+		UA:               ua,
+		Timeout:          15 * time.Second,
+		DefaultUserAgent: a.Config.DefaultUserAgent,
+		DefaultTimeout:   a.Config.DefaultTimeout,
+		CacheThreshold:   a.Config.CacheThreshold,
+		PlatformUserAgent: detectPlatformFromUA(ua),
+	})
+}
+
+// detectPlatformFromUA 从 User-Agent 推断平台类型
+func detectPlatformFromUA(ua string) string {
+	uaLower := strings.ToLower(ua)
+	if strings.Contains(uaLower, "stash") {
+		return "stash"
+	}
+	if strings.Contains(uaLower, "loon") {
+		return "loon"
+	}
+	if strings.Contains(uaLower, "quantumult") || strings.Contains(uaLower, "qx") {
+		return "qx"
+	}
+	if strings.Contains(uaLower, "shadowrocket") {
+		return "shadowrocket"
+	}
+	if strings.Contains(uaLower, "surge") {
+		return "surge"
+	}
+	return ""
 }
 
 // uploadArtifactsToGist 上传 artifact 文件到 Gist。

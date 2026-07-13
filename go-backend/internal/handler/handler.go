@@ -1607,7 +1607,8 @@ func PreviewCollection(a *app.App) gin.HandlerFunc {
 func PreviewFile(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Name    string          `json:"name"`
+			Name    string           `json:"name"`
+			Raw     string           `json:"raw,omitempty"`
 			Process []model.Operator `json:"process,omitempty"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -1615,9 +1616,61 @@ func PreviewFile(a *app.App) gin.HandlerFunc {
 			return
 		}
 		a.Info("Previewing file: " + req.Name)
+
+		files := store.GetList[model.File](a.Store, model.FILES_KEY)
+		file := store.FindByName(files, req.Name)
+		if file == nil {
+			failed(c, fmt.Errorf("file %s not found", req.Name), http.StatusNotFound)
+			return
+		}
+
+		original := ""
+		if req.Raw != "" {
+			original = req.Raw
+		} else if file.Content != "" {
+			original = file.Content
+		}
+		if file.URL != "" && original == "" {
+			urls := strings.Split(file.URL, "\n")
+			for _, u := range urls {
+				u = strings.TrimSpace(u)
+				if u == "" {
+					continue
+				}
+				content, err := fetchURL(u, file.UA, 15*time.Second, a)
+				if err == nil {
+					original += content + "\n"
+				}
+			}
+			original = strings.TrimSpace(original)
+		}
+
+		processed := original
+		if len(req.Process) > 0 && processed != "" {
+			proxies, err := parser.ParseContent(processed)
+			if err == nil && len(proxies) > 0 {
+				proxies, _ = applyProcess(proxies, req.Process)
+				var lines []string
+				for _, p := range proxies {
+					lines = append(lines, p.Name)
+				}
+				processed = strings.Join(lines, "\n")
+			}
+		} else if len(file.Process) > 0 && processed != "" {
+			proxies, err := parser.ParseContent(processed)
+			if err == nil && len(proxies) > 0 {
+				proxies, _ = applyProcess(proxies, file.Process)
+				var lines []string
+				for _, p := range proxies {
+					lines = append(lines, p.Name)
+				}
+				processed = strings.Join(lines, "\n")
+			}
+		}
+
 		result := map[string]interface{}{
-			"original":  "",
-			"processed": "",
+			"original":  original,
+			"processed": processed,
 		}
 		success(c, result)
 	}
@@ -1742,7 +1795,24 @@ func SortTokens(a *app.App) gin.HandlerFunc {
 			failed(c, err)
 			return
 		}
-		success(c, nil)
+		tokens := store.GetList[model.Token](a.Store, model.TOKENS_KEY)
+		orderMap := make(map[string]int)
+		for i, name := range names {
+			orderMap[name] = i
+		}
+		sort.Slice(tokens, func(i, j int) bool {
+			left, leftOK := orderMap[tokens[i].Name]
+			right, rightOK := orderMap[tokens[j].Name]
+			if !leftOK {
+				left = len(names)
+			}
+			if !rightOK {
+				right = len(names)
+			}
+			return left < right
+		})
+		store.SaveList(a.Store, model.TOKENS_KEY, tokens)
+		success(c, tokens)
 	}
 }
 
@@ -2090,7 +2160,9 @@ func RefreshCache(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		a.Info("Refreshing cache")
 		contentCache.Clear()
-		c.JSON(200, gin.H{"status": "success"})
+		cache.GetScriptCache().Cleanup("", 0)
+		// 清除 resource cache headers 缓存等
+		success(c, gin.H{"status": "success"})
 	}
 }
 
