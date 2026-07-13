@@ -3,7 +3,7 @@ app = "bs-sub-store-app"
 primary_region = "sin"
 
 [build]
-  image = "ghcr.io/woyin/sub-store:2.36.5-go.3"
+  image = "ghcr.io/woyin/sub-store:2.36.5-go.4"
 
 [env]
   SUB_STORE_BACKEND_API_HOST = "0.0.0.0"
