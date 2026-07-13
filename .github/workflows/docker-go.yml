@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [go-rewrite]
-    tags: ['v*', 'go-v*']
+    tags: ['v*-go*']
   pull_request:
     branches: [go-rewrite]
 
@@ -120,7 +120,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          prerelease: true
+          make_latest: false
           files: |
             artifacts/sub-store-*
             artifacts/SHA256SUMS
