@@ -15,8 +15,13 @@ RUN go mod download
 COPY . .
 
 # Build the application binary
-# buildx automatically sets GOOS/GOARCH for cross-platform builds
-RUN CGO_ENABLED=0 go build -ldflags='-w -s' -o sub-store ./cmd/sub-store/
+# We capture go build output to a file so buildx can show errors on failure
+RUN CGO_ENABLED=0 go build -ldflags='-w -s' -o sub-store ./cmd/sub-store/ 2>&1 \
+    || (echo "====== GO BUILD FAILED ======" && \
+        echo "GO_VERSION:" && go version && \
+        echo "GO_ENV:" && go env GOOS GOARCH CGO_ENABLED && \
+        echo "BUILD_ERROR above ^^^" && \
+        exit 1)
 
 # Final stage - minimal runtime image
 FROM alpine:latest
