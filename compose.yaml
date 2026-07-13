@@ -1,0 +1,99 @@
+# Sub-Store Go - Docker Compose 部署文件
+# 适用平台: Linux / macOS / Windows (Docker Desktop)
+# 快速开始: docker compose up -d
+
+services:
+  sub-store:
+    # 构建方式: 本地构建 (推荐开发测试)
+    build:
+      context: ./go-backend
+      dockerfile: Dockerfile
+      # 可选: 指定 Go 版本构建参数
+      args:
+        VERSION: latest
+
+    # 运行方式: 使用 GitHub Container Registry 预构建镜像 (推荐生产环境)
+    # 取消下面这行注释并注释掉 build 部分即可使用预构建镜像
+    # image: ghcr.io/woyin/sub-store:go-rewrite
+
+    container_name: sub-store
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"
+
+    environment:
+      # 后端 API 监听地址和端口
+      SUB_STORE_BACKEND_API_HOST: "0.0.0.0"
+      SUB_STORE_BACKEND_API_PORT: "3000"
+
+      # 数据持久化路径 (容器内)
+      SUB_STORE_DATA_BASE_PATH: "/app/data"
+
+      # 是否合并前端 (若使用独立前端请设为 false)
+      SUB_STORE_BACKEND_MERGE: "false"
+
+      # 后端 API 前缀
+      SUB_STORE_BACKEND_PREFIX: ""
+
+      # 默认 User-Agent
+      SUB_STORE_DEFAULT_USER_AGENT: "clash.meta/v1.19.23"
+
+      # 默认超时 (毫秒)
+      SUB_STORE_DEFAULT_TIMEOUT: "8000"
+
+      # 缓存阈值 (KB)
+      SUB_STORE_CACHE_THRESHOLD: "1024"
+
+      # 最大请求头大小 (字节)
+      SUB_STORE_MAX_HEADER_SIZE: "32768"
+
+      # 请求体 JSON 限制
+      SUB_STORE_BODY_JSON_LIMIT: "1mb"
+
+      # X-Powered-By 响应头
+      SUB_STORE_X_POWERED_BY: "Sub-Store"
+
+      # 同步 Cron 表达式 (可选)
+      # SUB_STORE_BACKEND_SYNC_CRON: "0 0 * * *"
+
+      # 预生成 Cron 表达式 (可选)
+      # SUB_STORE_PRODUCE_CRON: "0 */6 * * *"
+
+      # 预下载 Cron 表达式 (可选)
+      # SUB_STORE_BACKEND_DOWNLOAD_CRON: "0 */4 * * *"
+
+      # MMDB 更新 Cron 表达式 (可选)
+      # SUB_STORE_MMDB_CRON: "0 2 * * 1"
+
+      # MMDB 数据库路径 (可选)
+      # SUB_STORE_MMDB_COUNTRY_PATH: "/app/data/GeoLite2-Country.mmdb"
+      # SUB_STORE_MMDB_ASN_PATH: "/app/data/GeoLite2-ASN.mmdb"
+
+      # MMDB 下载 URL (可选)
+      # SUB_STORE_MMDB_COUNTRY_URL: "https://raw.githubusercontent.com/P3TERX/GeoLite.mmdb/download/GeoLite2-Country.mmdb"
+      # SUB_STORE_MMDB_ASN_URL: "https://raw.githubusercontent.com/P3TERX/GeoLite.mmdb/download/GeoLite2-ASN.mmdb"
+
+      # 默认代理 (下载订阅时使用)
+      # SUB_STORE_BACKEND_DEFAULT_PROXY: ""
+
+      # CORS 允许来源 (可选, 多个用逗号分隔)
+      # SUB_STORE_CORS_ALLOWED_ORIGINS: "*"
+
+      # 推送服务 URL (可选)
+      # SUB_STORE_PUSH_SERVICE: ""
+
+    volumes:
+      # 数据持久化: 订阅配置、缓存、设置等
+      - sub-store-data:/app/data
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  sub-store-data:
+    name: sub-store-data

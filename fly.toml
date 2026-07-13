@@ -1,29 +1,43 @@
-# fly.toml
+# Sub-Store Go - Fly.io 部署配置文件
+# 快速开始: fly launch --config fly.toml
+# 或: fly deploy --config fly.toml
 
 # 'app' 是您在 Fly.io 上的应用名称，必须是全局唯一的。
 # 运行 `fly launch` 或 `fly apps create` 时会自动生成或要求您设置。
 app = "bs-sub-store-app"
 
-# [build] 部分告诉 Fly.io 使用 Docker Hub 上的现成镜像，而不是在本地构建。
+# [build] 部分使用本地 Dockerfile 构建镜像
 [build]
-  image = "xream/sub-store"
+  dockerfile = "go-backend/Dockerfile"
 
 # [env] 部分设置非敏感的环境变量。
 [env]
+  # 启用后端合并模式 (兼容前后端一体部署)
   SUB_STORE_BACKEND_MERGE = "true"
-  # 我们将把敏感的后端路径作为 secret (机密) 来设置，而不是明文放在这里。
+  # 监听所有接口
+  SUB_STORE_BACKEND_API_HOST = "0.0.0.0"
+  # 监听端口 (与 services.internal_port 保持一致)
+  SUB_STORE_BACKEND_API_PORT = "3000"
+  # 数据持久化路径
+  SUB_STORE_DATA_BASE_PATH = "/app/data"
+  # 默认 User-Agent
+  SUB_STORE_DEFAULT_USER_AGENT = "clash.meta/v1.19.23"
 
-# [mounts] 部分定义了持久化存储卷，等同于 Docker 的 volume。
+# [mounts] 部分定义持久化存储卷，等同于 Docker 的 volume。
 [mounts]
   source = "sub_store_data"
-  destination = "/opt/app/data"
+  destination = "/app/data"
 
-# [[services]] 部分定义了网络服务和端口映射。
+# [[services]] 部分定义网络服务和端口映射。
 [[services]]
   protocol = "tcp"
   # internal_port 必须是容器内应用正在监听的端口。
-  # 根据我们之前的日志分析，sub-store 监听的是 3000。
   internal_port = 3000
+
+  # 自动停止 (空闲时自动停止以节省资源, 收到请求时自动启动)
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
 
   # 定义对外暴露的端口。Fly.io 会自动处理 HTTP 和 HTTPS。
   [[services.ports]]
