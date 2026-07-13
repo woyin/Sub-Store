@@ -1,57 +1,30 @@
-# Sub-Store Go - Fly.io 部署配置文件
-# 快速开始: fly launch --config fly.toml
-# 或: fly deploy --config fly.toml
-
-# 'app' 是您在 Fly.io 上的应用名称，必须是全局唯一的。
-# 运行 `fly launch` 或 `fly apps create` 时会自动生成或要求您设置。
+# Replace with globally unique Fly app name before first deployment.
 app = "bs-sub-store-app"
+primary_region = "sin"
 
-# [build] 部分使用本地 Dockerfile 构建镜像
 [build]
-  dockerfile = "go-backend/Dockerfile"
+  image = "ghcr.io/woyin/sub-store:2.36.5-go.3"
 
-# [env] 部分设置非敏感的环境变量。
 [env]
-  # 启用后端合并模式 (兼容前后端一体部署)
-  SUB_STORE_BACKEND_MERGE = "true"
-  # 监听所有接口
   SUB_STORE_BACKEND_API_HOST = "0.0.0.0"
-  # 监听端口 (与 services.internal_port 保持一致)
   SUB_STORE_BACKEND_API_PORT = "3000"
-  # 数据持久化路径
   SUB_STORE_DATA_BASE_PATH = "/app/data"
-  # 默认 User-Agent
-  SUB_STORE_DEFAULT_USER_AGENT = "clash.meta/v1.19.23"
+  SUB_STORE_BACKEND_MERGE = "false"
 
-# [mounts] 部分定义持久化存储卷，等同于 Docker 的 volume。
-[mounts]
+[[mounts]]
   source = "sub_store_data"
   destination = "/app/data"
 
-# [[services]] 部分定义网络服务和端口映射。
-[[services]]
-  protocol = "tcp"
-  # internal_port 必须是容器内应用正在监听的端口。
+[http_service]
   internal_port = 3000
-
-  # 自动停止 (空闲时自动停止以节省资源, 收到请求时自动启动)
+  force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
   min_machines_running = 0
 
-  # 定义对外暴露的端口。Fly.io 会自动处理 HTTP 和 HTTPS。
-  [[services.ports]]
-    port = 80
-    handlers = ["http"]
-    force_https = true # 自动将 HTTP 请求重定向到 HTTPS
-
-  [[services.ports]]
-    port = 443
-    handlers = ["tls", "http"]
-
-  # 添加健康检查，确保应用正常运行。
-  [services.http_checks]
+  [[http_service.checks]]
     interval = "15s"
     timeout = "2s"
+    grace_period = "10s"
     method = "GET"
-    path = "/" # 检查应用的根路径
+    path = "/"
