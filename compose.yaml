@@ -14,7 +14,7 @@ services:
 
     # 运行方式: 使用 GitHub Container Registry 预构建镜像 (推荐生产环境)
     # 取消下面这行注释并注释掉 build 部分即可使用预构建镜像
-    # image: ghcr.io/woyin/sub-store:go-rewrite
+    # image: ghcr.io/woyin/sub-store:latest
 
     container_name: sub-store
     restart: unless-stopped
