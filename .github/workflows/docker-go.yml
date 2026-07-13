@@ -15,75 +15,13 @@ env:
   IMAGE_NAME: ${{ github.repository_owner }}/sub-store
 
 jobs:
-  # Verify Go code compiles inside Docker (same env as actual build)
-  verify-build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Verify Go build in Docker
-        run: |
-          echo "=== Pulling golang:1.25-alpine ==="
-          docker pull golang:1.25-alpine
-          echo "=== Running go mod download ==="
-          docker run --rm -v "$PWD/go-backend":/app -w /app golang:1.25-alpine go mod download
-          echo "=== Running go build ==="
-          docker run --rm -v "$PWD/go-backend":/app -w /app golang:1.25-alpine sh -c \
-            "CGO_ENABLED=0 go build -v -ldflags='-w -s' -o /tmp/sub-store ./cmd/sub-store/ && echo BUILD_SUCCESS || (echo BUILD_FAILED && exit 1)"
-          echo "✅ Go build succeeded"
-
-  # Build amd64 natively
-  build-amd64:
-    needs: verify-build
+  build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      id-token: write
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log into registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch,suffix=-amd64
-            type=semver,pattern={{version}},suffix=-amd64
-            type=sha,prefix=,suffix=-amd64,format=short
-
-      - name: Build and push (amd64)
-        uses: docker/build-push-action@v5
-        with:
-          context: ./go-backend
-          file: ./go-backend/Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64
-          provenance: false
-          no-cache: true
-
-  # Build arm64 via QEMU
-  build-arm64:
-    needs: verify-build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -108,11 +46,15 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch,suffix=-arm64
-            type=semver,pattern={{version}},suffix=-arm64
-            type=sha,prefix=,suffix=-arm64,format=short
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=,suffix=,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/go-rewrite' }}
 
-      - name: Build and push (arm64)
+      - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: ./go-backend
@@ -120,49 +62,19 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/arm64
+          platforms: linux/amd64,linux/arm64
           provenance: false
-          no-cache: true
-
-  # Merge into multi-arch manifest
-  merge-manifest:
-    runs-on: ubuntu-latest
-    needs: [build-amd64, build-arm64]
-    if: github.event_name != 'pull_request'
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log into registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create multi-arch manifest
-        run: |
-          docker buildx imagetools create \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:go-rewrite \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:go-rewrite-amd64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:go-rewrite-arm64
-
-          echo "✅ Multi-arch manifest pushed: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   release:
     runs-on: ubuntu-latest
-    needs: merge-manifest
+    needs: build-and-push
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
       packages: read
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
