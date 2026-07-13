@@ -1,15 +1,17 @@
 # Replace with globally unique Fly app name before first deployment.
-app = "bs-sub-store-app"
+app = "omniroute-breestealth"
 primary_region = "sin"
 
 [build]
-  image = "ghcr.io/woyin/sub-store:2.36.5-go.4"
+  image = "ghcr.io/woyin/sub-store:2.36.5-go.5"
 
 [env]
   SUB_STORE_BACKEND_API_HOST = "0.0.0.0"
   SUB_STORE_BACKEND_API_PORT = "3000"
   SUB_STORE_DATA_BASE_PATH = "/app/data"
   SUB_STORE_BACKEND_MERGE = "true"
+  SUB_STORE_BACKEND_PREFIX = "true"
+  SUB_STORE_FRONTEND_BACKEND_PATH = "/kuvpkiocoqsinsnsucom"
 
 [[mounts]]
   source = "sub_store_data"
@@ -28,3 +30,7 @@ primary_region = "sin"
     grace_period = "10s"
     method = "GET"
     path = "/healthz"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

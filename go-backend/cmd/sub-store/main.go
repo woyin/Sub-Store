@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -18,10 +19,33 @@ import (
 	"sub-store/internal/store"
 )
 
-func setupRouter(a *app.App) *gin.Engine {
+func setupRouter(a *app.App) http.Handler {
 	r := gin.Default()
 	handler.RegisterRoutes(r, a)
-	return r
+	return backendPath(a.Config, r)
+}
+
+func backendPath(cfg *config.Config, next http.Handler) http.Handler {
+	prefix := strings.TrimSuffix(cfg.FrontendBackendPath, "/")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if cfg.BackendPrefix == "" || r.URL.Path == "/healthz" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if r.URL.Path == prefix || strings.HasPrefix(r.URL.Path, prefix+"/") {
+			r.URL.Path = strings.TrimPrefix(r.URL.Path, prefix)
+			if r.URL.Path == "" {
+				r.URL.Path = "/"
+			}
+			next.ServeHTTP(w, r)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/download/") || strings.HasPrefix(r.URL.Path, "/share/") {
+			http.NotFound(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func main() {
@@ -153,7 +177,7 @@ func main() {
 		os.Exit(0)
 	}()
 
-	if err := router.Run(addr); err != nil {
+	if err := http.ListenAndServe(addr, router); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
 }
