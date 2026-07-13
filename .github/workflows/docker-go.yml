@@ -12,12 +12,31 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # GHCR requires lowercase image names
   IMAGE_NAME: ${{ github.repository_owner }}/sub-store
 
 jobs:
-  # Build amd64 natively (no QEMU needed)
+  # Step 0: Verify Go code compiles on CI
+  verify-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Verify Go build
+        working-directory: go-backend
+        run: |
+          go mod download
+          CGO_ENABLED=0 go build -v -ldflags='-w -s' -o sub-store ./cmd/sub-store/
+          echo "✅ Go build succeeded"
+
+  # Step 1: Build amd64 natively
   build-amd64:
+    needs: verify-build
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -59,8 +78,9 @@ jobs:
           provenance: false
           no-cache: true
 
-  # Build arm64 via QEMU emulation
+  # Step 2: Build arm64 via QEMU
   build-arm64:
+    needs: verify-build
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -105,7 +125,7 @@ jobs:
           provenance: false
           no-cache: true
 
-  # Merge both architectures into a multi-arch manifest
+  # Step 3: Merge into multi-arch manifest
   merge-manifest:
     runs-on: ubuntu-latest
     needs: [build-amd64, build-arm64]
