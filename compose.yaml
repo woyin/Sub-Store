@@ -1,6 +1,6 @@
 services:
   sub-store:
-    image: ghcr.io/woyin/sub-store:2.36.5-go.5
+    image: ghcr.io/woyin/sub-store:2.36.5-go.6
     restart: unless-stopped
     ports:
       - "3000:3000"

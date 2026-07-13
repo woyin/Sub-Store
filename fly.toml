@@ -3,7 +3,7 @@ app = "omniroute-breestealth"
 primary_region = "sin"
 
 [build]
-  image = "ghcr.io/woyin/sub-store:2.36.5-go.5"
+  image = "ghcr.io/woyin/sub-store:2.36.5-go.6"
 
 [env]
   SUB_STORE_BACKEND_API_HOST = "0.0.0.0"
