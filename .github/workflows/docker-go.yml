@@ -63,11 +63,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           provenance: false
-          build-args: |
-            VERSION=${{ github.ref_name }}
+          no-cache: true
 
   release:
     runs-on: ubuntu-latest
