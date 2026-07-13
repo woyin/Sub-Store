@@ -41,20 +41,20 @@ var PlatformProducers = map[string]Producer{
 }
 
 var PlatformSupport = map[string]map[string]bool{
-	"clash":     {"ss": true, "vmess": true, "trojan": true, "ssr": false, "vless": false, "hysteria": false, "hysteria2": true, "tuic": true},
-	"clashmeta": {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "anytls": true},
-	"surge":     {"ss": true, "vmess": true, "trojan": true, "vless": true, "ssr": true, "socks5": true, "http": true, "snell": true, "hysteria2": true, "tuic": true, "wireguard": true, "h2-connect": true},
-	"loon":      {"ss": true, "vmess": true, "trojan": true, "ssr": false, "vless": true, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true},
-	"qx":        {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true},
-	"singbox":   {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "anytls": true, "wireguard": true, "socks5": true, "http": true},
-	"v2ray":     {"vmess": true},
-	"uri":       {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true},
+	"clash":        {"ss": true, "vmess": true, "trojan": true, "ssr": false, "vless": false, "hysteria": false, "hysteria2": true, "tuic": true},
+	"clashmeta":    {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "anytls": true},
+	"surge":        {"ss": true, "vmess": true, "trojan": true, "vless": true, "ssr": true, "socks5": true, "http": true, "snell": true, "hysteria2": true, "tuic": true, "wireguard": true, "h2-connect": true},
+	"loon":         {"ss": true, "vmess": true, "trojan": true, "ssr": false, "vless": true, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true},
+	"qx":           {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true},
+	"singbox":      {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "anytls": true, "wireguard": true, "socks5": true, "http": true},
+	"v2ray":        {"vmess": true},
+	"uri":          {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true},
 	"shadowrocket": {"ss": true, "vmess": true, "trojan": true, "ssr": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "anytls": true, "wireguard": true, "socks5": true, "http": true, "snell": true},
-	"stash":     {"ss": true, "ssr": true, "vmess": true, "trojan": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "anytls": true, "wireguard": true, "socks5": true, "http": true, "snell": true, "ssh": true, "juicity": true, "trusttunnel": true},
-	"surfboard": {"ss": true, "vmess": true, "trojan": true, "hysteria2": true, "anytls": true, "socks5": true, "http": true, "snell": true, "wireguard": true},
-	"egern":     {"ss": true, "vmess": true, "trojan": true, "vless": true, "hysteria2": true, "tuic": true, "anytls": true, "wireguard": true, "socks5": true, "http": true, "ssh": true, "snell": true},
-	"surgemac":  {"ss": true, "vmess": true, "trojan": true, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true, "snell": true, "ssh": true, "h2-connect": true, "anytls": true, "trusttunnel": true, "direct": true, "external": true},
-	"json":      {"ss": true, "ssr": true, "vmess": true, "trojan": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "anytls": true, "wireguard": true, "socks5": true, "http": true, "snell": true, "ssh": true},
+	"stash":        {"ss": true, "ssr": true, "vmess": true, "trojan": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "anytls": true, "wireguard": true, "socks5": true, "http": true, "snell": true, "ssh": true, "juicity": true, "trusttunnel": true},
+	"surfboard":    {"ss": true, "vmess": true, "trojan": true, "hysteria2": true, "anytls": true, "socks5": true, "http": true, "snell": true, "wireguard": true},
+	"egern":        {"ss": true, "vmess": true, "trojan": true, "vless": true, "hysteria2": true, "tuic": true, "anytls": true, "wireguard": true, "socks5": true, "http": true, "ssh": true, "snell": true},
+	"surgemac":     {"ss": true, "vmess": true, "trojan": true, "hysteria2": true, "tuic": true, "wireguard": true, "socks5": true, "http": true, "snell": true, "ssh": true, "h2-connect": true, "anytls": true, "trusttunnel": true, "direct": true, "external": true},
+	"json":         {"ss": true, "ssr": true, "vmess": true, "trojan": true, "vless": true, "hysteria": true, "hysteria2": true, "tuic": true, "anytls": true, "wireguard": true, "socks5": true, "http": true, "snell": true, "ssh": true},
 }
 
 func IsProxySupported(platform, proxyType string) bool {
@@ -1196,6 +1196,11 @@ func (u *uriProducer) ProduceSingle(proxy *model.Proxy) (string, error) {
 		if p.SNI != "" {
 			params.Set("sni", p.SNI)
 		}
+		if len(p.VCN) > 0 {
+			params.Set("vcn", strings.Join(p.VCN, ","))
+		} else if p.NameCertVerify != "" {
+			params.Set("vcn", p.NameCertVerify)
+		}
 		if p.Flow != "" {
 			params.Set("flow", p.Flow)
 		}
@@ -1211,6 +1216,11 @@ func (u *uriProducer) ProduceSingle(proxy *model.Proxy) (string, error) {
 		params := url.Values{}
 		if p.SNI != "" {
 			params.Set("sni", p.SNI)
+		}
+		if len(p.VCN) > 0 {
+			params.Set("vcn", strings.Join(p.VCN, ","))
+		} else if p.NameCertVerify != "" {
+			params.Set("vcn", p.NameCertVerify)
 		}
 		if len(params) > 0 {
 			s += "?" + params.Encode()

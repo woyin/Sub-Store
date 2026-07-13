@@ -269,6 +269,16 @@ func (p *URIParser) ParseVMess(line string) (*model.Proxy, error) {
 	return nil, fmt.Errorf("vmess: failed to parse JSON")
 }
 
+func splitNonEmpty(value string) []string {
+	var result []string
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
 func (p *URIParser) ParseVLESS(line string) (*model.Proxy, error) {
 	parsed, err := url.Parse(line)
 	if err != nil {
@@ -300,6 +310,10 @@ func (p *URIParser) ParseVLESS(line string) (*model.Proxy, error) {
 	}
 	if sni := query.Get("sni"); sni != "" {
 		proxy.SNI = sni
+	}
+	if vcn := splitNonEmpty(query.Get("vcn")); len(vcn) > 0 {
+		proxy.VCN = vcn
+		proxy.NameCertVerify = vcn[0]
 	}
 	if flow := query.Get("flow"); flow != "" {
 		proxy.Flow = flow
@@ -388,6 +402,10 @@ func (p *URIParser) ParseTrojan(line string) (*model.Proxy, error) {
 
 	if sni := query.Get("sni"); sni != "" {
 		proxy.SNI = sni
+	}
+	if vcn := splitNonEmpty(query.Get("vcn")); len(vcn) > 0 {
+		proxy.VCN = vcn
+		proxy.NameCertVerify = vcn[0]
 	}
 
 	proxy.Network = query.Get("type")
@@ -1144,7 +1162,7 @@ func (b *Base64Preprocessor) Parse(raw string) string {
 
 type FallbackBase64Preprocessor struct{}
 
-func (f *FallbackBase64Preprocessor) Name() string { return "Fallback Base64 Pre-processor" }
+func (f *FallbackBase64Preprocessor) Name() string         { return "Fallback Base64 Pre-processor" }
 func (f *FallbackBase64Preprocessor) Test(raw string) bool { return true }
 func (f *FallbackBase64Preprocessor) Parse(raw string) string {
 	decoded, err := base64.StdEncoding.DecodeString(raw)
