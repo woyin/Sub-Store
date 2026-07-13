@@ -6,6 +6,7 @@ import (
 
 func GetList[T any](s *Store, key string) []T {
 	if data := s.Read(key); data != nil {
+		// Fast path: data is already []interface{} (after JSON reload)
 		if list, ok := data.([]interface{}); ok {
 			result := make([]T, 0, len(list))
 			for _, item := range list {
@@ -19,6 +20,26 @@ func GetList[T any](s *Store, key string) []T {
 				}
 			}
 			return result
+		}
+		// Slow path: data is a typed slice (e.g. []model.Subscription)
+		// Go does not allow direct assertion of []T to []interface{},
+		// so we round-trip through JSON to normalize the type.
+		if jsonData, err := json.Marshal(data); err == nil {
+			var list []interface{}
+			if err := json.Unmarshal(jsonData, &list); err == nil {
+				result := make([]T, 0, len(list))
+				for _, item := range list {
+					if obj, ok := item.(map[string]interface{}); ok {
+						var t T
+						if innerData, err := json.Marshal(obj); err == nil {
+							if err := json.Unmarshal(innerData, &t); err == nil {
+								result = append(result, t)
+							}
+						}
+					}
+				}
+				return result
+			}
 		}
 	}
 	return []T{}
