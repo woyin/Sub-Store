@@ -24,8 +24,13 @@ jobs:
 
       - name: Verify Go build in Docker
         run: |
+          echo "=== Pulling golang:1.25-alpine ==="
+          docker pull golang:1.25-alpine
+          echo "=== Running go mod download ==="
+          docker run --rm -v "$PWD/go-backend":/app -w /app golang:1.25-alpine go mod download
+          echo "=== Running go build ==="
           docker run --rm -v "$PWD/go-backend":/app -w /app golang:1.25-alpine sh -c \
-            "go mod download && CGO_ENABLED=0 go build -v -ldflags='-w -s' -o /dev/null ./cmd/sub-store/"
+            "CGO_ENABLED=0 go build -v -ldflags='-w -s' -o /tmp/sub-store ./cmd/sub-store/ && echo BUILD_SUCCESS || (echo BUILD_FAILED && exit 1)"
           echo "✅ Go build succeeded"
 
   # Build amd64 natively
