@@ -8,11 +8,11 @@ services:
       SUB_STORE_BACKEND_API_HOST: "0.0.0.0"
       SUB_STORE_BACKEND_API_PORT: "3000"
       SUB_STORE_DATA_BASE_PATH: "/app/data"
-      SUB_STORE_BACKEND_MERGE: "false"
+      SUB_STORE_BACKEND_MERGE: "true"
     volumes:
       - sub-store-data:/app/data
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3

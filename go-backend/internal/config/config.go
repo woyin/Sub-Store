@@ -15,6 +15,7 @@ type Config struct {
 	FrontendPath        string
 	FrontendPort        string
 	FrontendHost        string
+	FrontendURL         string
 	SyncCron            string
 	ProduceCron         string
 	DownloadCron        string
@@ -50,6 +51,7 @@ func Load() *Config {
 		FrontendPath:        GetEnv("SUB_STORE_FRONTEND_PATH", ""),
 		FrontendPort:        GetEnv("SUB_STORE_FRONTEND_PORT", "3001"),
 		FrontendHost:        GetEnv("SUB_STORE_FRONTEND_HOST", "::"),
+		FrontendURL:         GetEnv("SUB_STORE_FRONTEND_URL", "https://sub-store.vercel.app"),
 		SyncCron:            GetEnv("SUB_STORE_BACKEND_SYNC_CRON", ""),
 		ProduceCron:         GetEnv("SUB_STORE_PRODUCE_CRON", ""),
 		DownloadCron:        GetEnv("SUB_STORE_BACKEND_DOWNLOAD_CRON", ""),

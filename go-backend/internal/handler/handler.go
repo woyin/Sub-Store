@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"runtime"
 	"sort"
@@ -14,11 +16,12 @@ import (
 	"net"
 
 	"sub-store/internal/ageutil"
-	"sub-store/internal/geoip"
 	"sub-store/internal/app"
 	"sub-store/internal/cache"
+	"sub-store/internal/config"
 	"sub-store/internal/download"
 	"sub-store/internal/flowutil"
+	"sub-store/internal/geoip"
 	"sub-store/internal/gist"
 	"sub-store/internal/middleware"
 	"sub-store/internal/model"
@@ -916,12 +919,12 @@ func NezhaServerDetails(a *app.App, artifactType string) gin.HandlerFunc {
 		var result []map[string]interface{}
 		for i, p := range proxies {
 			entry := map[string]interface{}{
-				"id":         i,
-				"name":       p.Name,
+				"id":          i,
+				"name":        p.Name,
 				"last_active": 0,
-				"valid_ip":   "",
-				"ipv4":       p.Server,
-				"ipv6":       "",
+				"valid_ip":    "",
+				"ipv4":        p.Server,
+				"ipv6":        "",
 				"host": map[string]interface{}{
 					"Platform":    p.Type,
 					"CountryCode": getCountryCode(p),
@@ -1390,11 +1393,11 @@ func fetchURL(urlStr, ua string, timeout time.Duration, a *app.App) (string, err
 	initDownloadClient(a)
 
 	opts := download.Options{
-		UA:               ua,
-		Timeout:          timeout,
-		DefaultUserAgent: a.Config.DefaultUserAgent,
-		DefaultTimeout:   a.Config.DefaultTimeout,
-		CacheThreshold:   a.Config.CacheThreshold,
+		UA:                ua,
+		Timeout:           timeout,
+		DefaultUserAgent:  a.Config.DefaultUserAgent,
+		DefaultTimeout:    a.Config.DefaultTimeout,
+		CacheThreshold:    a.Config.CacheThreshold,
 		PlatformUserAgent: detectPlatformFromUA(ua),
 	}
 
@@ -1482,8 +1485,8 @@ func UpdateSettings(a *app.App) gin.HandlerFunc {
 func PreviewSubscription(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Name    string          `json:"name"`
-			Raw     string          `json:"raw,omitempty"`
+			Name    string           `json:"name"`
+			Raw     string           `json:"raw,omitempty"`
 			Process []model.Operator `json:"process,omitempty"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -1551,7 +1554,7 @@ func PreviewSubscription(a *app.App) gin.HandlerFunc {
 func PreviewCollection(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Name    string          `json:"name"`
+			Name    string           `json:"name"`
 			Process []model.Operator `json:"process,omitempty"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -2389,7 +2392,15 @@ func ImportStorage(a *app.App) gin.HandlerFunc {
 }
 
 func RegisterRoutes(r *gin.Engine, a *app.App) {
+	frontendProxy := newFrontendProxy(a.Config)
+	r.GET("/healthz", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok", "message": "Hello from Sub-Store Go"})
+	})
 	r.GET("/", func(c *gin.Context) {
+		if frontendProxy != nil {
+			frontendProxy.ServeHTTP(c.Writer, c.Request)
+			return
+		}
 		c.JSON(200, gin.H{"status": "ok", "message": "Hello from Sub-Store Go"})
 	})
 
@@ -2509,6 +2520,27 @@ func RegisterRoutes(r *gin.Engine, a *app.App) {
 	}
 
 	r.NoRoute(func(c *gin.Context) {
+		if frontendProxy != nil && c.Request.Method == http.MethodGet {
+			frontendProxy.ServeHTTP(c.Writer, c.Request)
+			return
+		}
 		c.JSON(404, gin.H{"status": "failed", "message": "ERROR: 404 not found"})
 	})
+}
+
+func newFrontendProxy(cfg *config.Config) http.Handler {
+	if !cfg.BackendMerge || cfg.FrontendURL == "" {
+		return nil
+	}
+	target, err := url.Parse(cfg.FrontendURL)
+	if err != nil || (target.Scheme != "http" && target.Scheme != "https") || target.Host == "" {
+		return nil
+	}
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	originalDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		originalDirector(req)
+		req.Host = target.Host
+	}
+	return proxy
 }
