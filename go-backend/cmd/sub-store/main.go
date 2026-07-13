@@ -14,6 +14,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"sub-store/internal/app"
+	"sub-store/internal/cache"
 	"sub-store/internal/config"
 	"sub-store/internal/handler"
 	"sub-store/internal/store"
@@ -51,6 +52,7 @@ func backendPath(cfg *config.Config, next http.Handler) http.Handler {
 func main() {
 	cfg := config.Load()
 	st := store.NewStore(cfg.DataBasePath)
+	cache.InitScriptResourceCache(st)
 	if err := st.Migrate(); err != nil {
 		log.Fatalf("Failed to migrate store: %v", err)
 	}
