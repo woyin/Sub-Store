@@ -1,6 +1,9 @@
 # Sub-Store Go - Multi-stage build
 # Supports: linux/amd64, linux/arm64 (via Docker buildx)
-FROM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /app
 
@@ -15,7 +18,7 @@ RUN go mod download
 COPY . .
 
 # Build the application binary
-RUN CGO_ENABLED=0 go build -ldflags='-w -s' -o sub-store ./cmd/sub-store/
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags='-w -s' -o sub-store ./cmd/sub-store/
 
 # Final stage - minimal runtime image
 FROM alpine:latest
