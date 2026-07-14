@@ -27,9 +27,12 @@ func setupRouter(a *app.App) http.Handler {
 }
 
 func backendPath(cfg *config.Config, next http.Handler) http.Handler {
-	prefix := strings.TrimSuffix(cfg.FrontendBackendPath, "/")
+	prefix := strings.Trim(strings.TrimSpace(cfg.BackendPath), "/")
+	if prefix != "" {
+		prefix = "/" + prefix
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if cfg.BackendPrefix == "" || r.URL.Path == "/healthz" {
+		if prefix == "" || r.URL.Path == "/healthz" {
 			next.ServeHTTP(w, r)
 			return
 		}

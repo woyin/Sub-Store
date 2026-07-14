@@ -75,6 +75,8 @@ go build -o sub-store ./cmd/sub-store/
 | `SUB_STORE_BACKEND_API_HOST` | 监听地址 | `::` |
 | `SUB_STORE_BACKEND_API_PORT` | 监听端口 | `3000` |
 | `SUB_STORE_DATA_BASE_PATH` | 数据目录 | `.` |
+| `SUB_STORE_BACKEND_MERGE` | 在根路径提供 UI | `false` |
+| `SUB_STORE_BACKEND_PATH` | 私有后端路径；非空时隐藏无前缀 API | 空 |
 | `SUB_STORE_BACKEND_SYNC_CRON` | 同步 cron 表达式 | 空 |
 | `SUB_STORE_BACKEND_PRODUCE_CRON` | 生成 cron 表达式 | 空 |
 | `SUB_STORE_BACKEND_DOWNLOAD_CRON` | 预取 cron 表达式 | 空 |
@@ -86,15 +88,26 @@ go build -o sub-store ./cmd/sub-store/
 
 ```bash
 docker build -t sub-store-go ./go-backend
-docker run -d -p 3000:3000 -v sub-store-data:/app/data sub-store-go
+docker run -d -p 3000:3000 -v sub-store-data:/app/data -e SUB_STORE_BACKEND_MERGE=true -e SUB_STORE_BACKEND_PATH=your-private-path sub-store-go
 ```
 
 ### GHCR 镜像
 
 ```bash
 docker pull ghcr.io/woyin/sub-store:latest
-docker run -d -p 3000:3000 -v sub-store-data:/app/data ghcr.io/woyin/sub-store:latest
+docker run -d -p 3000:3000 -v sub-store-data:/app/data -e SUB_STORE_BACKEND_MERGE=true -e SUB_STORE_BACKEND_PATH=your-private-path ghcr.io/woyin/sub-store:latest
 ```
+
+### Fly.io 私有后端路径
+
+不要把后端路径写入 `fly.toml`。使用 Fly Secret：
+
+```bash
+flyctl secrets set SUB_STORE_BACKEND_PATH=your-private-path --app your-app
+flyctl deploy --config fly.toml
+```
+
+UI 中输入相同路径。此路径用于隐藏后端入口，不替代强认证。
 
 ## API 端点
 

@@ -17,7 +17,7 @@ func TestBackendPath(t *testing.T) {
 	r := gin.New()
 	r.GET("/api/subs", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 	r.GET("/healthz", func(c *gin.Context) { c.Status(http.StatusOK) })
-	handler := backendPath(&config.Config{BackendPrefix: "true", FrontendBackendPath: "/secret"}, r)
+	handler := backendPath(&config.Config{BackendPath: "secret"}, r)
 
 	for path, want := range map[string]int{
 		"/secret/api/subs": http.StatusNoContent,
